@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Any, Callable
 from src.models.vehicle import Vehicle
 from src.models.basestation import BaseStation
 from src.models.energy import EnergyModel
@@ -23,7 +23,11 @@ class RSSIHandoff:
 
     def select_best_bs(self, vehicle: Vehicle,
                       base_stations: List[BaseStation],
-                      tx_power: float = 0.1) -> Tuple[Optional[BaseStation], dict]:
+                      tx_power: float = 0.1,
+                      *,
+                      link_metrics_getter: Optional[
+                          Callable[[Vehicle, BaseStation, bool], Optional[Dict[str, Any]]]
+                      ] = None) -> Tuple[Optional[BaseStation], dict]:
         """
         Strongest RSSI using per-link adaptive TX (required power to each BS).
         tx_power argument is kept for API compatibility; selection uses adaptive power.
@@ -33,15 +37,21 @@ class RSSIHandoff:
         best_distance = float('inf')
 
         for bs in base_stations:
-            if not bs.is_in_coverage(vehicle.x, vehicle.y):
-                continue
-
-            if not bs.has_capacity():
-                continue
-
-            distance = bs.distance_to(vehicle.x, vehicle.y)
-            tx_link = self.energy_model.calculate_tx_power_required(distance)
-            rssi = bs.calculate_received_power(vehicle.x, vehicle.y, tx_link)
+            if link_metrics_getter is not None:
+                row = link_metrics_getter(vehicle, bs, True)
+                if row is None:
+                    continue
+                distance = row['distance']
+                rssi = row['rx_power']
+            else:
+                if not bs.is_in_coverage(vehicle.x, vehicle.y):
+                    continue
+                if not bs.has_capacity():
+                    continue
+                distance = bs.distance_to(vehicle.x, vehicle.y)
+                # Weather-aware TX requirement using the BS/channel model.
+                tx_link = bs.calculate_tx_power_required_for_target_rx(distance)
+                rssi = bs.calculate_received_power(vehicle.x, vehicle.y, tx_link)
 
             if rssi > best_rssi:
                 best_rssi = rssi

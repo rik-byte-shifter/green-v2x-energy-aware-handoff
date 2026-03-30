@@ -1,5 +1,7 @@
+import math
 import os
 import sys
+from statistics import NormalDist
 
 import pytest
 
@@ -62,6 +64,41 @@ def test_rain_attenuation_is_added_to_path_loss():
     pl_no = bs_no.calculate_path_loss(d_m)
     pl_yes = bs_yes.calculate_path_loss(d_m)
     assert pl_yes - pl_no == pytest.approx(10.0)
+
+
+def test_percentile_margin_increases_required_tx_power():
+    # Margin model: Ptx = Prx_target + PL + z_p*sigma. Verify delta in dB.
+    sigma_db = 10.0
+    p = 0.95
+    z = NormalDist().inv_cdf(p)
+    expected_margin_db = z * sigma_db
+
+    cfg_base = BSConfig(
+        coverage_radius=1000.0,
+        shadowing_std_db=sigma_db,
+        path_loss_exponent=2.0,
+        rain_attenuation_db_per_km=0.0,
+        shadowing_reliability=0.5,  # z=0 -> zero margin baseline
+        tx_power_min_watts=1e-9,
+        tx_power_max_watts=10.0,
+    )
+    cfg_margin = BSConfig(
+        coverage_radius=1000.0,
+        shadowing_std_db=sigma_db,
+        path_loss_exponent=2.0,
+        rain_attenuation_db_per_km=0.0,
+        shadowing_reliability=p,
+        tx_power_min_watts=1e-9,
+        tx_power_max_watts=10.0,
+    )
+    bs0 = BaseStation(0, x=0.0, y=0.0, config=cfg_base)
+    bs1 = BaseStation(1, x=0.0, y=0.0, config=cfg_margin)
+
+    d_m = 100.0
+    p0 = bs0.calculate_tx_power_required_for_target_rx(d_m)
+    p1 = bs1.calculate_tx_power_required_for_target_rx(d_m)
+    delta_db = 10.0 * math.log10(p1 / p0)
+    assert delta_db == pytest.approx(expected_margin_db, rel=1e-6)
 
 
 def test_energy_aware_qos_filter_and_fallback():
@@ -135,3 +172,53 @@ def test_simulator_short_run():
     assert out['stats']['co2_kg'] >= 0.0
     assert 'co2_kg_per_vehicle_per_year' in out['stats']
     assert out['stats']['co2_kg_per_vehicle_per_year'] >= 0.0
+    assert 'avg_throughput_bps' in out['stats']
+    assert out['stats']['avg_throughput_bps'] >= 0.0
+    assert 'p5_throughput_bps' in out['stats']
+    assert out['stats']['p5_throughput_bps'] >= 0.0
+    assert 'outage_probability_percent' in out['stats']
+    assert 0.0 <= out['stats']['outage_probability_percent'] <= 100.0
+    assert 'ping_pong_handoffs' in out['stats']
+    assert out['stats']['ping_pong_handoffs'] >= 0
+    assert 'ping_pong_rate_percent' in out['stats']
+    assert 0.0 <= out['stats']['ping_pong_rate_percent'] <= 100.0
+
+
+def test_stronger_baselines_short_run():
+    cfg = SimulationConfig(
+        num_vehicles=3,
+        num_base_stations=4,
+        duration=5,
+        area_size=500,
+        seed=123,
+    )
+    sim = V2XSimulator(cfg)
+    sim.setup_network()
+    sim.setup_vehicles()
+    for name in ("sinr", "load_aware_rssi"):
+        out = sim.run_algorithm(name)
+        assert "stats" in out
+        assert out["stats"]["total_bits"] >= 0
+        assert out["stats"]["avg_energy_per_bit"] >= 0.0
+        assert out["stats"]["avg_throughput_bps"] >= 0.0
+        assert 0.0 <= out["stats"]["outage_probability_percent"] <= 100.0
+
+
+def test_link_metrics_include_interference_and_sinr():
+    cfg = SimulationConfig(
+        num_vehicles=1,
+        num_base_stations=4,
+        duration=1,
+        area_size=500,
+        seed=7,
+    )
+    sim = V2XSimulator(cfg)
+    sim.setup_network()
+    sim.setup_vehicles()
+    v = sim.vehicles[0]
+    get_link = sim._make_step_link_metrics_getter()
+    rows = [get_link(v, bs, False) for bs in sim.base_stations]
+    rows = [r for r in rows if r is not None]
+    assert rows, "At least one BS should produce link metrics"
+    assert all("interference_mw" in r for r in rows)
+    assert all(r["interference_mw"] >= 0.0 for r in rows)

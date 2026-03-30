@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Optional, Dict, Any, Callable
 from src.models.vehicle import Vehicle
 from src.models.basestation import BaseStation
 from src.models.energy import EnergyModel
@@ -26,6 +26,7 @@ class EnergyAwareHandoff:
         time_to_trigger_s: float = 2.0,
         min_time_since_last_handoff_s: float = 4.0,
         min_data_rate_bps: float = 5e6,
+        packet_size: int = 1000,
     ):
         # Minimum relative EPB improvement required (e.g. 0.25 => >25% vs current BS)
         self.hysteresis = hysteresis
@@ -34,6 +35,7 @@ class EnergyAwareHandoff:
         self.time_to_trigger_s = time_to_trigger_s
         self.min_time_since_last_handoff_s = min_time_since_last_handoff_s
         self.min_data_rate_bps = min_data_rate_bps
+        self.packet_size = packet_size
         self.energy_model = EnergyModel()
 
         self.total_handoffs = 0
@@ -59,21 +61,48 @@ class EnergyAwareHandoff:
         bs: BaseStation,
         *,
         require_capacity: bool,
+        link_metrics_getter: Optional[
+            Callable[[Vehicle, BaseStation, bool], Optional[Dict[str, Any]]]
+        ] = None,
     ) -> Optional[Dict[str, Any]]:
+        if link_metrics_getter is not None:
+            row = link_metrics_getter(vehicle, bs, require_capacity)
+            if row is None:
+                return None
+            # Enforce outage policy even when metrics are provided by simulator cache.
+            # This keeps candidate filtering consistent with the configured threshold.
+            if float(row.get('snr', float('inf'))) <= self.snr_outage_threshold_db:
+                out = dict(row)
+                out['data_rate'] = 0.0
+                out['energy_per_bit'] = float('inf')
+                out['metric'] = float('inf')
+                return out
+            return row
+
         if not bs.is_in_coverage(vehicle.x, vehicle.y):
             return None
         if require_capacity and not bs.has_capacity():
             return None
 
         distance = bs.distance_to(vehicle.x, vehicle.y)
-        tx_power = self.energy_model.calculate_tx_power_required(distance)
+        # Weather-aware TX requirement: must use the same channel/path-loss
+        # model as `calculate_received_power()` / SNR.
+        tx_power = bs.calculate_tx_power_required_for_target_rx(distance)
         rx_power = bs.calculate_received_power(vehicle.x, vehicle.y, tx_power)
         snr = rx_power - _NOISE_PLUS_TERM
-        data_rate = max(
-            1e5,
-            20e6 * np.log2(1.0 + 10 ** (snr / 10.0)),
-        )
-        epb = self.energy_model.calculate_energy_per_bit(tx_power, data_rate)
+        if snr <= self.snr_outage_threshold_db:
+            data_rate = 0.0
+            epb = float('inf')
+        else:
+            data_rate = max(
+                1e5,
+                20e6 * np.log2(1.0 + 10 ** (snr / 10.0)),
+            )
+            epb = self.energy_model.calculate_energy_per_bit(
+                tx_power,
+                data_rate,
+                packet_size=self.packet_size,
+            )
         load_factor = 1.0 + 2.0 * bs.get_load()
         metric = epb * load_factor
 
@@ -87,37 +116,75 @@ class EnergyAwareHandoff:
             'load': bs.get_load(),
         }
 
-    def link_energy_per_bit(self, vehicle: Vehicle, bs: BaseStation) -> Optional[float]:
+    def link_energy_per_bit(
+        self,
+        vehicle: Vehicle,
+        bs: BaseStation,
+        *,
+        link_metrics_getter: Optional[
+            Callable[[Vehicle, BaseStation, bool], Optional[Dict[str, Any]]]
+        ] = None,
+    ) -> Optional[float]:
         """EPB for an existing link (ignores capacity gate)."""
-        m = self._link_metrics(vehicle, bs, require_capacity=False)
+        m = self._link_metrics(
+            vehicle,
+            bs,
+            require_capacity=False,
+            link_metrics_getter=link_metrics_getter,
+        )
         return None if m is None else m['energy_per_bit']
 
     def link_tx_and_data_rate(
-        self, vehicle: Vehicle, bs: BaseStation
+        self,
+        vehicle: Vehicle,
+        bs: BaseStation,
+        *,
+        link_metrics_getter: Optional[
+            Callable[[Vehicle, BaseStation, bool], Optional[Dict[str, Any]]]
+        ] = None,
     ) -> Optional[Tuple[float, float]]:
         """TX power and Shannon-style data rate for the vehicle–BS link."""
-        m = self._link_metrics(vehicle, bs, require_capacity=False)
+        m = self._link_metrics(
+            vehicle,
+            bs,
+            require_capacity=False,
+            link_metrics_getter=link_metrics_getter,
+        )
         if m is None:
             return None
         return m['tx_power'], m['data_rate']
 
     def select_best_bs(self, vehicle: Vehicle,
-                      base_stations: List[BaseStation]) -> Tuple[Optional[BaseStation], dict]:
+                      base_stations: List[BaseStation],
+                      *,
+                      link_metrics_getter: Optional[
+                          Callable[[Vehicle, BaseStation, bool], Optional[Dict[str, Any]]]
+                      ] = None) -> Tuple[Optional[BaseStation], dict]:
         candidates = []
         for bs in base_stations:
-            row = self._link_metrics(vehicle, bs, require_capacity=True)
+            row = self._link_metrics(
+                vehicle,
+                bs,
+                require_capacity=True,
+                link_metrics_getter=link_metrics_getter,
+            )
             if row is not None:
                 candidates.append(row)
 
         if not candidates:
             return None, {}
 
+        # Explicitly remove outage links (zero throughput) from handoff candidates.
+        viable = [r for r in candidates if r['data_rate'] > 0.0]
+        if not viable:
+            return None, {}
+
         qos_pool = [
-            r for r in candidates
+            r for r in viable
             if r['data_rate'] >= self.min_data_rate_bps
         ]
         # Prefer BS that meet min throughput; if none (outage / edge), fall back to best EPB
-        pool = qos_pool if qos_pool else candidates
+        pool = qos_pool if qos_pool else viable
         qos_satisfied = bool(qos_pool)
 
         best = min(pool, key=lambda x: x['metric'])

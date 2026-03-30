@@ -1,5 +1,6 @@
 import numpy as np
 from dataclasses import dataclass
+from statistics import NormalDist
 from typing import List
 
 from src.models.channel import apply_log_normal_shadowing
@@ -19,6 +20,11 @@ class BSConfig:
     path_loss_exponent: float = 2.0
     # Extra attenuation applied per km (dB/km). 0 disables.
     rain_attenuation_db_per_km: float = 0.0
+    # TX link-budget settings (percentile reliability design under shadowing).
+    target_rx_power_dbm: float = -90.0
+    shadowing_reliability: float = 0.95
+    tx_power_min_watts: float = 0.005
+    tx_power_max_watts: float = 0.5
 
 
 class BaseStation:
@@ -76,6 +82,52 @@ class BaseStation:
         d_km = float(distance) / 1000.0
         path_loss += self.config.rain_attenuation_db_per_km * d_km
         return path_loss
+
+    def calculate_tx_power_required_for_target_rx(
+        self,
+        distance_m: float,
+        target_rx_power_dbm: float | None = None,
+        shadowing_reliability: float | None = None,
+    ) -> float:
+        """
+        Compute required TX power (W) with percentile shadowing margin:
+
+            P_tx_required(dBm) = P_rx_target(dBm) + PL_mean(d) + M
+            M = z_p * sigma_shadowing_db
+
+        where z_p is the Gaussian quantile for reliability p.
+
+        Uses the same channel model as `calculate_received_power()`:
+        - `calculate_path_loss()` is weather-aware (rain attenuation + configurable exponent)
+        - Random shadowing in `calculate_received_power()` still models run-time variation;
+          this method provisions TX against that uncertainty with a deterministic margin.
+
+        Args:
+            distance_m: Distance between BS and vehicle (meters).
+            target_rx_power_dbm: Target received power threshold (dBm). If None, use config.
+            shadowing_reliability: Target reliability p in (0,1). If None, use config.
+        """
+        if target_rx_power_dbm is None:
+            target_rx_power_dbm = self.config.target_rx_power_dbm
+        if shadowing_reliability is None:
+            shadowing_reliability = self.config.shadowing_reliability
+
+        p = float(np.clip(shadowing_reliability, 1e-6, 1.0 - 1e-6))
+        sigma_db = max(0.0, float(self.config.shadowing_std_db))
+        z_p = NormalDist().inv_cdf(p)
+        margin_db = z_p * sigma_db
+
+        path_loss_db = self.calculate_path_loss(distance_m)
+        tx_power_dbm = float(target_rx_power_dbm) + path_loss_db + margin_db
+
+        # dBm -> watts conversion
+        tx_power_watts = 10 ** ((tx_power_dbm - 30.0) / 10.0)
+
+        # Keep simulator stable with configurable TX limits.
+        tx_power_watts = max(tx_power_watts, self.config.tx_power_min_watts)
+        tx_power_watts = min(tx_power_watts, self.config.tx_power_max_watts)
+
+        return float(tx_power_watts)
 
     def calculate_received_power(self, x: float, y: float,
                                   tx_power_watts: float) -> float:

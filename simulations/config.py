@@ -43,11 +43,13 @@ class SimulationConfig:
     # Extra energy per handoff (signaling / re-association), joules
     handoff_energy_joules: float = 0.08
 
-    # During handoff the radio may stay on; energy += tx_power * handoff_delay (J)
+    # During handoff the radio may stay on; energy += total TX-chain power * handoff_delay (J)
     handoff_delay_s: float = 0.05
 
     # Minimum time between handoffs for one vehicle (seconds), reduces ping-pong
     handoff_cooldown_s: float = 4.0
+    # Ping-pong detection window (seconds): A->B then B->A within window.
+    ping_pong_window_s: float = 10.0
 
     # Energy-aware: min relative EPB gain to handoff (0.25 = 25%); TTT reduces ping-pong
     energy_aware_min_energy_saving: float = 0.25
@@ -60,6 +62,11 @@ class SimulationConfig:
 
     # Applied to BSConfig: slow-fading / shadowing on RX power (dB). 0 = off.
     shadowing_std_db: float = 8.0
+    # Reliability target for percentile-margin TX provisioning under shadowing.
+    # Example: 0.95 -> z ~= 1.645, margin = z * sigma_shadowing_db.
+    shadowing_reliability: float = 0.95
+    # Target RX threshold used by the TX power requirement function.
+    target_rx_power_dbm: float = -90.0
 
     # Weather affects propagation (path loss exponent, shadowing, and extra
     # precipitation/scattering attenuation).
@@ -122,6 +129,7 @@ class SimulationConfig:
                 ):
                     assert lo > 0 and hi >= lo
         assert self.shadowing_std_db >= 0.0
+        assert 0.0 < self.shadowing_reliability < 1.0
         if self.weather_profile not in WEATHER_PROFILES:
             # Allow unknown strings from external callers/CLI; default to clear.
             self.weather_profile = "clear"
@@ -131,13 +139,15 @@ class SimulationConfig:
         assert 0.0 < self.energy_aware_min_energy_saving < 1.0
         assert self.energy_aware_time_to_trigger_s >= 0.0
         assert self.energy_aware_min_data_rate_bps >= 0.0
+        assert self.ping_pong_window_s >= 0.0
 
     @staticmethod
     def sparse_demonstration_scenario() -> "SimulationConfig":
         """
-        High shadowing + sparse coverage feel + RSSI energy baseline using fixed TX power
-        (config.tx_power_default) while energy-aware uses adaptive power — highlights
-        EPB and total-energy gains vs RSSI (typically >>15% EPB; total joules depends on handoffs).
+        High shadowing + sparse coverage feel with PHY-fair baselines:
+        RSSI, energy-aware, and naive-nearest all use the same adaptive link PHY
+        assumptions for energy reporting. A fixed-TX variant is available as a
+        sensitivity experiment.
         """
         return SimulationConfig(
             num_vehicles=20,
@@ -153,10 +163,24 @@ class SimulationConfig:
             energy_aware_min_energy_saving=0.32,
             energy_aware_time_to_trigger_s=4.5,
             energy_aware_min_data_rate_bps=1e6,
-            rssi_energy_use_fixed_tx=True,
+            rssi_energy_use_fixed_tx=False,
             tx_power_default=0.12,
+            shadowing_reliability=0.95,
+            target_rx_power_dbm=-90.0,
             weather_profile="heavy_rain",
         )
+
+    @staticmethod
+    def sparse_demonstration_scenario_fixed_rssi_tx_sensitivity() -> "SimulationConfig":
+        """
+        Sensitivity experiment: enable `rssi_energy_use_fixed_tx`.
+
+        The simulator keeps the fair adaptive baseline for primary metrics/plots,
+        and exports fixed-TX energy as extra fields under the RSSI results.
+        """
+        cfg = SimulationConfig.sparse_demonstration_scenario()
+        cfg.rssi_energy_use_fixed_tx = True
+        return cfg
 
     def get_weather(self) -> WeatherProfile:
         """Resolved weather profile configuration for the simulator."""
