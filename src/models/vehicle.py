@@ -31,12 +31,19 @@ class Vehicle:
     """
 
     def __init__(self, vehicle_id: int, x: float, y: float,
-                 speed: float = 20.0, direction: float = 0.0):
+                 speed: float = 20.0, direction: float = 0.0,
+                 lane_y: Optional[float] = None,
+                 highway_direction_rad: float = 0.0,
+                 lane_index: Optional[int] = None):
         self.vehicle_id = vehicle_id
         self.x = x
         self.y = y
         self.speed = speed  # m/s
-        self.direction = direction  # radians
+        self.direction = direction  # radians (ignored for movement if lane_y is set)
+        self.lane_y = lane_y  # if set, straight highway: fixed lateral position, wrap along road
+        self.lane_index = lane_index  # highway lane id (0..n-1), for rare lane changes
+        self.highway_direction_rad = highway_direction_rad
+        self.last_lane_switch_time = -1e9
         self.state = VehicleState()
 
         # Communication parameters
@@ -44,18 +51,44 @@ class Vehicle:
         self.min_tx_power = 0.001  # 1 mW
         self.antenna_gain = 0  # dBi
 
-    def move(self, delta_time: float = 1.0, boundary: tuple = (0, 2000)):
+    def move(
+        self,
+        delta_time: float = 1.0,
+        boundary: tuple = (0, 2000),
+        lateral_jitter_std_m: float = 0.0,
+    ):
         """
         Update vehicle position based on speed and direction
 
         Parameters:
         - delta_time: Time step (seconds)
         - boundary: Simulation area boundaries (min, max)
+        - lateral_jitter_std_m: highway mode only — Gaussian noise on y (lane wobble), meters
         """
+        min_bound, max_bound = boundary
+
+        if self.lane_y is not None:
+            self.direction = self.highway_direction_rad
+            self.x += self.speed * np.cos(self.direction) * delta_time
+            if lateral_jitter_std_m > 0.0:
+                self.y = float(
+                    np.clip(
+                        self.lane_y
+                        + np.random.normal(0.0, lateral_jitter_std_m),
+                        min_bound,
+                        max_bound,
+                    )
+                )
+            else:
+                self.y = float(self.lane_y)
+            span = max_bound - min_bound
+            if span > 0:
+                self.x = min_bound + (self.x - min_bound) % span
+            return
+
         self.x += self.speed * np.cos(self.direction) * delta_time
         self.y += self.speed * np.sin(self.direction) * delta_time
 
-        min_bound, max_bound = boundary
         if self.x < min_bound or self.x > max_bound:
             self.direction = np.pi - self.direction
             self.x = np.clip(self.x, min_bound, max_bound)
@@ -97,6 +130,7 @@ class Vehicle:
     def reset_stats(self):
         """Reset statistics for new simulation run"""
         self.state = VehicleState()
+        self.last_lane_switch_time = -1e9
 
     def __repr__(self):
         return f"Vehicle(id={self.vehicle_id}, pos=({self.x:.1f}, {self.y:.1f}), " \

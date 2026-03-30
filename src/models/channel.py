@@ -1,5 +1,48 @@
 import numpy as np
 
+# 20 MHz NR/LTE-style discrete MCS ceilings (bps): SNR must reach threshold to use rate
+MCS_MIN_SNR_DB = np.array([0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 24.0], dtype=float)
+MCS_MAX_RATE_BPS = np.array(
+    [3.0e6, 8.0e6, 16.0e6, 32.0e6, 55.0e6, 80.0e6, 100.0e6], dtype=float
+)
+DEFAULT_BANDWIDTH_HZ = 20e6
+DEFAULT_MAX_DATA_RATE_BPS = 100e6
+
+
+def bounded_shannon_data_rate(
+    snr_db: float,
+    bandwidth_hz: float = DEFAULT_BANDWIDTH_HZ,
+    max_rate_bps: float = DEFAULT_MAX_DATA_RATE_BPS,
+    min_snr_db: float = 0.0,
+) -> float:
+    """
+    Shannon capacity limited by discrete MCS and a physical max rate.
+
+    Uses C = B log2(1 + SNR_linear), then min with the highest MCS rate the
+    SNR supports, then caps at max_rate_bps.
+
+    If SNR is at or below min_snr_db (dB), the link is in outage (rate 0).
+    """
+    if snr_db <= min_snr_db:
+        return 0.0
+    snr_linear = 10 ** (snr_db / 10.0)
+    shannon = bandwidth_hz * np.log2(1 + snr_linear)
+    idx = int(np.searchsorted(MCS_MIN_SNR_DB, snr_db, side="right")) - 1
+    if idx < 0:
+        return 0.0
+    mcs_ceiling = float(MCS_MAX_RATE_BPS[idx])
+    return float(min(shannon, mcs_ceiling, max_rate_bps))
+
+
+def apply_log_normal_shadowing(rx_power_dbm: float, shadowing_std_db: float) -> float:
+    """
+    Add slow (log-normal) shadowing in the dB domain to received power.
+    shadowing_std_db: standard deviation in dB (typ. 6–10). 0 = disabled.
+    """
+    if shadowing_std_db <= 0:
+        return rx_power_dbm
+    return float(rx_power_dbm + np.random.normal(0.0, shadowing_std_db))
+
 
 class ChannelModel:
     """
@@ -53,9 +96,11 @@ class ChannelModel:
         snr = rx_power_dbm - total_noise
         return snr
 
-    def calculate_data_rate(self, snr_db: float,
-                           bandwidth: float = 20e6) -> float:
-        snr_linear = 10 ** (snr_db / 10.0)
-        data_rate = bandwidth * np.log2(1 + snr_linear)
-
-        return data_rate
+    def calculate_data_rate(
+        self,
+        snr_db: float,
+        bandwidth: float = DEFAULT_BANDWIDTH_HZ,
+        max_rate_bps: float = DEFAULT_MAX_DATA_RATE_BPS,
+        min_snr_db: float = 0.0,
+    ) -> float:
+        return bounded_shannon_data_rate(snr_db, bandwidth, max_rate_bps, min_snr_db)

@@ -2,6 +2,8 @@ import numpy as np
 from dataclasses import dataclass
 from typing import List
 
+from src.models.channel import apply_log_normal_shadowing
+
 
 @dataclass
 class BSConfig:
@@ -11,6 +13,12 @@ class BSConfig:
     frequency: float = 2.4e9  # 2.4 GHz
     bandwidth: float = 20e6  # 20 MHz
     noise_figure: float = 5.0  # dB
+    # Log-normal shadowing on received power (dB); 0 disables
+    shadowing_std_db: float = 8.0
+    # Distance loss scaling exponent (n in 10*n*log10(d)).
+    path_loss_exponent: float = 2.0
+    # Extra attenuation applied per km (dB/km). 0 disables.
+    rain_attenuation_db_per_km: float = 0.0
 
 
 class BaseStation:
@@ -46,14 +54,27 @@ class BaseStation:
         """
         Calculate path loss using simplified model
 
-        Path Loss (dB) = 20*log10(d) + 20*log10(f) - 147.55
+        Path Loss (dB) = 10*n*log10(d) + 20*log10(f) - 147.55 + rain_att(d)
+        where:
+          - d is in meters (distance term is unit-consistent with the original code),
+          - rain_att(d) = rain_attenuation_db_per_km * (d/1000).
+
+        This keeps the simulator stable (defaults match the legacy exponent-2 term)
+        while allowing weather to change the distance exponent and add attenuation.
         """
         if distance < 1:
             distance = 1
 
         frequency = self.config.frequency
-        path_loss = 20 * np.log10(distance) + \
-                    20 * np.log10(frequency) - 147.55
+        path_loss = (
+            10 * self.config.path_loss_exponent * np.log10(distance)
+            + 20 * np.log10(frequency)
+            - 147.55
+        )
+
+        # Extra weather loss term.
+        d_km = float(distance) / 1000.0
+        path_loss += self.config.rain_attenuation_db_per_km * d_km
         return path_loss
 
     def calculate_received_power(self, x: float, y: float,
@@ -70,7 +91,7 @@ class BaseStation:
         path_loss = self.calculate_path_loss(distance)
         rx_power = tx_power_dbm - path_loss
 
-        return rx_power
+        return apply_log_normal_shadowing(rx_power, self.config.shadowing_std_db)
 
     def has_capacity(self) -> bool:
         """Check if BS can accept more vehicles"""
