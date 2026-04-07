@@ -104,14 +104,23 @@ class Vehicle:
         """Calculate distance to a point"""
         return np.sqrt((self.x - x) ** 2 + (self.y - y) ** 2)
 
-    def update_energy(self, tx_power: float, duration: float, data_rate: float,
-                      energy_model: Optional["EnergyModel"] = None):
+    def update_energy(
+        self,
+        tx_power: float,
+        duration: float,
+        data_rate: float,
+        energy_model: Optional["EnergyModel"] = None,
+        device_type: str = "obu",
+    ):
         """
         Track energy consumption. If energy_model is given, uses total TX-chain power
         (PA + circuits); otherwise RF output only (tx_power * duration).
         """
         if energy_model is not None:
-            energy = energy_model.calculate_total_power(tx_power, 'transmit') * duration
+            energy = (
+                energy_model.calculate_total_power(tx_power, "transmit", device_type=device_type)
+                * duration
+            )
         else:
             energy = tx_power * duration
         bits = data_rate * duration

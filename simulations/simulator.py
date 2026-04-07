@@ -1,13 +1,23 @@
 import json
 import os
+import sys
 from typing import Dict, List, Optional, Any, Callable, Tuple
 
 import numpy as np
 from tqdm import tqdm
 
+# Ensure project-root imports work when running this file directly.
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from src.models.vehicle import Vehicle
 from src.models.basestation import BaseStation, BSConfig
-from src.models.energy import EnergyModel, EnvironmentalMetrics
+from src.models.energy import (
+    ComprehensiveEnvironmentalMetrics,
+    EnergyModel,
+    EnvironmentalMetrics,
+)
 from src.algorithms.energy_aware_handoff import EnergyAwareHandoff
 from src.algorithms.rssi_handoff import RSSIHandoff
 from src.algorithms.sinr_handoff import SINRHandoff
@@ -27,9 +37,16 @@ class V2XSimulator:
 
         self.base_stations: List[BaseStation] = []
         self.vehicles: List[Vehicle] = []
-        self.energy_model = EnergyModel()
+        self.energy_model = EnergyModel(
+            use_calibration=self.config.use_energy_calibration
+        )
         self.environmental = EnvironmentalMetrics(
             self.config.carbon_intensity_kg_per_kwh
+        )
+        self._comprehensive_env = ComprehensiveEnvironmentalMetrics(
+            carbon_intensity_kg_per_kwh=self.config.carbon_intensity_kg_per_kwh,
+            include_infrastructure=self.config.comprehensive_co2_include_infrastructure,
+            include_embodied_carbon=self.config.comprehensive_co2_include_embodied,
         )
 
         self.energy_aware_algo = EnergyAwareHandoff(
@@ -44,6 +61,14 @@ class V2XSimulator:
         self.sinr_algo = SINRHandoff()
         self.load_aware_rssi_algo = LoadAwareRSSIHandoff()
         self.naive_nearest_algo = NaiveNearestHandoff()
+
+        for _algo in (
+            self.energy_aware_algo,
+            self.rssi_algo,
+            self.sinr_algo,
+            self.load_aware_rssi_algo,
+        ):
+            _algo.energy_model = self.energy_model
 
         self.results = {
             'energy_aware': {},
@@ -135,7 +160,7 @@ class V2XSimulator:
         # as the RX/SNR link metrics.
         tx_power = new_bs.calculate_tx_power_required_for_target_rx(distance)
         vehicle.state.energy_consumed += (
-            self.energy_model.calculate_total_power(tx_power, 'transmit')
+            self.energy_model.calculate_total_power(tx_power, "transmit", device_type="obu")
             * self.config.handoff_delay_s
         )
         vehicle.state.last_handoff_time = current_time
@@ -240,6 +265,7 @@ class V2XSimulator:
                         tx_power,
                         data_rate,
                         packet_size=self.config.packet_size,
+                        device_type="obu",
                     )
 
                 channel_cache[key] = {
@@ -299,6 +325,17 @@ class V2XSimulator:
         total_step_samples = 0
         outage_samples = 0
         ping_pong_handoffs = 0
+        tx_power_samples = []
+        sinr_samples_db = []
+        bs_load_samples = []
+        reconnect_events = 0
+        outage_bursts_s = []
+        per_vehicle_up_steps: Dict[int, int] = {v.vehicle_id: 0 for v in self.vehicles}
+        per_vehicle_outage_steps: Dict[int, int] = {v.vehicle_id: 0 for v in self.vehicles}
+        prev_service_state: Dict[int, Optional[bool]] = {
+            v.vehicle_id: None for v in self.vehicles
+        }
+        ongoing_outage_steps: Dict[int, int] = {v.vehicle_id: 0 for v in self.vehicles}
         # vehicle_id -> (time, from_bs, to_bs)
         last_handoff_event: Dict[int, Tuple[float, Optional[int], int]] = {}
 
@@ -344,6 +381,8 @@ class V2XSimulator:
         for step in tqdm(range(num_steps), desc=f"Simulating {algorithm_name}"):
             current_time = step * self.config.time_step
             get_link_metrics = self._make_step_link_metrics_getter()
+            for bs in self.base_stations:
+                bs_load_samples.append(float(bs.get_load()))
 
             step_energy = 0
             step_epb = 0
@@ -539,13 +578,42 @@ class V2XSimulator:
                     if row is None:
                         total_step_samples += 1
                         outage_samples += 1
+                        vid = vehicle.vehicle_id
+                        per_vehicle_outage_steps[vid] += 1
+                        ongoing_outage_steps[vid] += 1
+                        prev = prev_service_state[vid]
+                        if prev is True:
+                            prev_service_state[vid] = False
+                        elif prev is None:
+                            prev_service_state[vid] = False
                         continue
                     distance = row['distance']
                     tx_power = row['tx_power']
                     data_rate = row['data_rate']
+                    sinr = row['snr']
                     total_step_samples += 1
-                    if row['snr'] <= self.config.snr_outage_threshold_db:
+                    if sinr <= self.config.snr_outage_threshold_db:
                         outage_samples += 1
+                    service_up = sinr > self.config.snr_outage_threshold_db
+                    vid = vehicle.vehicle_id
+                    prev = prev_service_state[vid]
+                    if service_up:
+                        per_vehicle_up_steps[vid] += 1
+                        if prev is False:
+                            reconnect_events += 1
+                        if ongoing_outage_steps[vid] > 0:
+                            outage_bursts_s.append(
+                                ongoing_outage_steps[vid] * self.config.time_step
+                            )
+                            ongoing_outage_steps[vid] = 0
+                        prev_service_state[vid] = True
+                    else:
+                        per_vehicle_outage_steps[vid] += 1
+                        ongoing_outage_steps[vid] += 1
+                        if prev is True:
+                            prev_service_state[vid] = False
+                        elif prev is None:
+                            prev_service_state[vid] = False
 
                     if rssi_fixed_tx_sensitivity:
                         # Fixed PHY sensitivity: classic static TX + fixed offered rate.
@@ -553,7 +621,7 @@ class V2XSimulator:
                         dr_fixed = self.config.data_rate
                         e_fixed_step = (
                             self.energy_model.calculate_total_power(
-                                tx_fixed, 'transmit'
+                                tx_fixed, "transmit", device_type="obu"
                             )
                             * self.config.time_step
                         )
@@ -569,21 +637,32 @@ class V2XSimulator:
                     )
 
                     step_energy += self.energy_model.calculate_total_power(
-                        tx_power, 'transmit'
+                        tx_power, "transmit", device_type="obu"
                     ) * self.config.time_step
                     step_epb += self.energy_model.calculate_energy_per_bit(
                         tx_power,
                         data_rate,
                         packet_size=self.config.packet_size,
+                        device_type="obu",
                     )
                     step_tx_power += tx_power
                     step_data_rate += data_rate
                     step_distance += distance
                     connected_count += 1
+                    tx_power_samples.append(float(tx_power))
+                    sinr_samples_db.append(float(sinr))
                 else:
                     # Unconnected vehicle is counted as outage for service reliability.
                     total_step_samples += 1
                     outage_samples += 1
+                    vid = vehicle.vehicle_id
+                    per_vehicle_outage_steps[vid] += 1
+                    ongoing_outage_steps[vid] += 1
+                    prev = prev_service_state[vid]
+                    if prev is True:
+                        prev_service_state[vid] = False
+                    elif prev is None:
+                        prev_service_state[vid] = False
 
             metrics['time'].append(current_time)
             metrics['total_energy'].append(step_energy)
@@ -610,6 +689,12 @@ class V2XSimulator:
         total_energy = sum(v.state.energy_consumed for v in self.vehicles)
         total_bits = sum(v.state.bits_transmitted for v in self.vehicles)
         total_handoffs = algo.total_handoffs
+        total_handoff_delay_s = total_handoffs * self.config.handoff_delay_s
+        handoff_delay_fraction_percent = (
+            total_handoff_delay_s / (self.config.num_vehicles * self.config.duration) * 100.0
+            if self.config.num_vehicles > 0 and self.config.duration > 0
+            else 0.0
+        )
         per_vehicle_avg_throughput_bps = [
             float(v.state.bits_transmitted / self.config.duration) for v in self.vehicles
         ]
@@ -620,6 +705,27 @@ class V2XSimulator:
             if total_step_samples > 0
             else 0.0
         )
+        for vid in ongoing_outage_steps:
+            if ongoing_outage_steps[vid] > 0:
+                outage_bursts_s.append(ongoing_outage_steps[vid] * self.config.time_step)
+        per_vehicle_service_availability_percent = [
+            (per_vehicle_up_steps[v.vehicle_id] / max(1, num_steps) * 100.0)
+            for v in self.vehicles
+        ]
+        avg_service_availability_percent = float(
+            np.mean(per_vehicle_service_availability_percent)
+        )
+        p5_service_availability_percent = float(
+            np.percentile(per_vehicle_service_availability_percent, 5)
+        )
+        service_availability_std_percent = float(
+            np.std(per_vehicle_service_availability_percent)
+        )
+        avg_outage_burst_s = float(np.mean(outage_bursts_s)) if outage_bursts_s else 0.0
+        p95_outage_burst_s = (
+            float(np.percentile(outage_bursts_s, 95)) if outage_bursts_s else 0.0
+        )
+        max_outage_burst_s = float(np.max(outage_bursts_s)) if outage_bursts_s else 0.0
 
         co2_kg = self.environmental.energy_to_co2(total_energy)
         dur_s = float(self.config.duration)
@@ -629,6 +735,12 @@ class V2XSimulator:
         )
         co2_v_yr = self.environmental.co2_kg_per_vehicle_per_year(
             co2_kg, self.config.num_vehicles, dur_s, sy
+        )
+        co2_breakdown = self._comprehensive_env.calculate_total_co2(
+            communication_energy_j=total_energy,
+            num_base_stations=len(self.base_stations),
+            simulation_duration_s=dur_s,
+            include_all_scope=True,
         )
         stats = {
             'total_energy_joules': total_energy,
@@ -648,17 +760,37 @@ class V2XSimulator:
                 if total_handoffs > 0
                 else 0.0
             ),
+            'reconnect_events': int(reconnect_events),
+            'handoff_delay_total_s': float(total_handoff_delay_s),
+            'handoff_delay_per_vehicle_s': float(
+                total_handoff_delay_s / self.config.num_vehicles
+            ),
+            'handoff_delay_fraction_percent': float(handoff_delay_fraction_percent),
+            'per_vehicle_service_availability_percent': [
+                float(x) for x in per_vehicle_service_availability_percent
+            ],
+            'avg_service_availability_percent': avg_service_availability_percent,
+            'p5_service_availability_percent': p5_service_availability_percent,
+            'service_availability_std_percent': service_availability_std_percent,
+            'avg_outage_burst_s': avg_outage_burst_s,
+            'p95_outage_burst_s': p95_outage_burst_s,
+            'max_outage_burst_s': max_outage_burst_s,
             'connection_rate': np.mean(metrics['connected_vehicles']) / self.config.num_vehicles,
             'co2_kg': co2_kg,
             'co2_grams': co2_kg * 1000,
             'carbon_intensity_kg_per_kwh': self.environmental.carbon_intensity,
             'avg_co2_kg_per_vehicle': co2_avg_v,
             'co2_kg_per_vehicle_per_year': co2_v_yr,
+            'co2_breakdown_comprehensive': co2_breakdown,
+            'co2_scope_statement': self._comprehensive_env.get_scope_statement(),
             'simulation_duration_s': dur_s,
             'seconds_per_year': sy,
             'per_vehicle_energy_joules': [
                 float(v.state.energy_consumed) for v in self.vehicles
             ],
+            'tx_power_samples_w': tx_power_samples,
+            'sinr_samples_db': sinr_samples_db,
+            'bs_load_samples': bs_load_samples,
         }
 
         if rssi_fixed_tx_sensitivity and rssi_fixed_energy_by_vid is not None:
@@ -701,6 +833,14 @@ class V2XSimulator:
         print(
             f"  Ping-pong Handoffs: {ping_pong_handoffs} "
             f"({stats['ping_pong_rate_percent']:.2f}% of handoffs)"
+        )
+        print(
+            f"  Handoff Delay: total {total_handoff_delay_s:.2f}s, "
+            f"per-vehicle {stats['handoff_delay_per_vehicle_s']:.3f}s"
+        )
+        print(
+            f"  Service Availability: avg {avg_service_availability_percent:.2f}%, "
+            f"p5 {p5_service_availability_percent:.2f}%"
         )
         print(f"  Avg TX Power: {stats['avg_tx_power']*1000:.2f} mW")
 

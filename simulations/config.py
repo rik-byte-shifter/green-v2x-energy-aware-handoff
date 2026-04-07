@@ -78,6 +78,13 @@ class SimulationConfig:
     # Grid carbon intensity for reporting CO2 from energy (kg CO2 per kWh).
     carbon_intensity_kg_per_kwh: float = 0.5
 
+    # Scale model EPB toward literature anchors (see ``EnergyModelValidator``).
+    use_energy_calibration: bool = True
+
+    # Optional extended CO2 breakdown (does not replace simple grid-intensity CO2 in stats).
+    comprehensive_co2_include_infrastructure: bool = True
+    comprehensive_co2_include_embodied: bool = False
+
     # Mean Gregorian year; used to annualize per-vehicle CO2 from simulation duration.
     seconds_per_year: float = 365.25 * 24 * 3600
 
@@ -169,6 +176,46 @@ class SimulationConfig:
             target_rx_power_dbm=-90.0,
             weather_profile="heavy_rain",
         )
+
+    @staticmethod
+    def extended_validation_scenario() -> "SimulationConfig":
+        """
+        Longer run (1 h) for extrapolation / stability experiments.
+
+        Same highway + fading style as the sparse demo, extended duration.
+        """
+        return SimulationConfig(
+            num_vehicles=20,
+            num_base_stations=9,
+            area_size=3000,
+            bs_coverage_radius=250,
+            duration=3600,
+            movement_mode="highway",
+            highway_num_lanes=4,
+            shadowing_std_db=15.0,
+            highway_lateral_noise_std_m=0.5,
+            handoff_cooldown_s=8.0,
+            energy_aware_min_energy_saving=0.32,
+            energy_aware_time_to_trigger_s=4.5,
+            energy_aware_min_data_rate_bps=1e6,
+            rssi_energy_use_fixed_tx=False,
+            tx_power_default=0.12,
+            shadowing_reliability=0.95,
+            target_rx_power_dbm=-90.0,
+            weather_profile="heavy_rain",
+            seed=42,
+        )
+
+    @staticmethod
+    def multi_duration_validation() -> List[Tuple[int, str]]:
+        """(duration_s, label) pairs for multi-duration extrapolation checks."""
+        return [
+            (300, "5 minutes - short term"),
+            (900, "15 minutes - medium term"),
+            (1800, "30 minutes - medium-long"),
+            (3600, "1 hour - extended"),
+            (7200, "2 hours - validation"),
+        ]
 
     @staticmethod
     def sparse_demonstration_scenario_fixed_rssi_tx_sensitivity() -> "SimulationConfig":

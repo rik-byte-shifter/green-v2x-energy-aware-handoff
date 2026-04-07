@@ -1,0 +1,74 @@
+{
+  "seeds": [
+    42,
+    123
+  ],
+  "pa_efficiency_values": [
+    0.25,
+    0.35,
+    0.45
+  ],
+  "tx_circuit_power_values_w": [
+    0.05,
+    0.1,
+    0.15
+  ],
+  "pa_efficiency_sweep": [
+    {
+      "pa_efficiency": 0.25,
+      "energy_saving_percent_mean": 41.50413759848847,
+      "energy_saving_percent_std": 0.0218573637909536,
+      "per_seed_energy_saving_percent": [
+        41.52599496227943,
+        41.48228023469752
+      ]
+    },
+    {
+      "pa_efficiency": 0.35,
+      "energy_saving_percent_mean": 41.394507419010495,
+      "energy_saving_percent_std": 0.02207780019659822,
+      "per_seed_energy_saving_percent": [
+        41.41658521920709,
+        41.3724296188139
+      ]
+    },
+    {
+      "pa_efficiency": 0.45,
+      "energy_saving_percent_mean": 41.2903486887346,
+      "energy_saving_percent_std": 0.022287090111817065,
+      "per_seed_energy_saving_percent": [
+        41.31263577884642,
+        41.268061598622786
+      ]
+    }
+  ],
+  "tx_circuit_power_sweep": [
+    {
+      "p_tx_circuit_w": 0.05,
+      "energy_saving_percent_mean": 41.517326129449096,
+      "energy_saving_percent_std": 0.02220018621701314,
+      "per_seed_energy_saving_percent": [
+        41.53952631566611,
+        41.49512594323208
+      ]
+    },
+    {
+      "p_tx_circuit_w": 0.1,
+      "energy_saving_percent_mean": 41.394507419010495,
+      "energy_saving_percent_std": 0.02207780019659822,
+      "per_seed_energy_saving_percent": [
+        41.41658521920709,
+        41.3724296188139
+      ]
+    },
+    {
+      "p_tx_circuit_w": 0.15,
+      "energy_saving_percent_mean": 41.2800115061391,
+      "energy_saving_percent_std": 0.021965181246422105,
+      "per_seed_energy_saving_percent": [
+        41.30197668738552,
+        41.258046324892675
+      ]
+    }
+  ]
+}

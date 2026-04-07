@@ -102,6 +102,7 @@ class EnergyAwareHandoff:
                 tx_power,
                 data_rate,
                 packet_size=self.packet_size,
+                device_type="obu",
             )
         load_factor = 1.0 + 2.0 * bs.get_load()
         metric = epb * load_factor

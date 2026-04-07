@@ -13,7 +13,13 @@ from simulations.config import SimulationConfig
 from simulations.simulator import V2XSimulator
 from src.models.vehicle import Vehicle
 from src.models.basestation import BaseStation, BSConfig
-from src.models.energy import EnvironmentalMetrics
+from src.models.energy import (
+    ComprehensiveEnvironmentalMetrics,
+    EnvironmentalMetrics,
+    EnergyModel,
+    representative_model_epb_predictions,
+)
+from src.utils.hardware_validation import EnergyModelValidator
 from src.algorithms.energy_aware_handoff import EnergyAwareHandoff
 
 
@@ -182,6 +188,16 @@ def test_simulator_short_run():
     assert out['stats']['ping_pong_handoffs'] >= 0
     assert 'ping_pong_rate_percent' in out['stats']
     assert 0.0 <= out['stats']['ping_pong_rate_percent'] <= 100.0
+    assert 'handoff_delay_total_s' in out['stats']
+    assert out['stats']['handoff_delay_total_s'] >= 0.0
+    assert 'handoff_delay_per_vehicle_s' in out['stats']
+    assert out['stats']['handoff_delay_per_vehicle_s'] >= 0.0
+    assert 'avg_service_availability_percent' in out['stats']
+    assert 0.0 <= out['stats']['avg_service_availability_percent'] <= 100.0
+    assert 'p5_service_availability_percent' in out['stats']
+    assert 0.0 <= out['stats']['p5_service_availability_percent'] <= 100.0
+    assert 'reconnect_events' in out['stats']
+    assert out['stats']['reconnect_events'] >= 0
 
 
 def test_stronger_baselines_short_run():
@@ -222,3 +238,48 @@ def test_link_metrics_include_interference_and_sinr():
     assert rows, "At least one BS should produce link metrics"
     assert all("interference_mw" in r for r in rows)
     assert all(r["interference_mw"] >= 0.0 for r in rows)
+
+
+def test_comprehensive_co2_breakdown_totals():
+    c = ComprehensiveEnvironmentalMetrics(
+        carbon_intensity_kg_per_kwh=0.5,
+        include_infrastructure=True,
+        include_embodied_carbon=False,
+    )
+    b = c.calculate_total_co2(
+        communication_energy_j=3.6e6,
+        num_base_stations=1,
+        simulation_duration_s=3600.0,
+        include_all_scope=True,
+    )
+    assert b["communication_direct_kg"] == pytest.approx(0.5)
+    assert b["infrastructure_overhead_kg"] == pytest.approx(0.25)
+    assert b["total_kg"] == pytest.approx(0.75)
+
+
+def test_hardware_validator_and_representative_epb():
+    em = EnergyModel(use_calibration=True)
+    pred = representative_model_epb_predictions(em)
+    assert "bs_energy_per_bit" in pred and "obu_energy_per_bit" in pred
+    v = EnergyModelValidator()
+    r = v.validate_model(pred)
+    assert "comparisons" in r and len(r["comparisons"]) >= 1
+    assert r["mean_absolute_error"] >= 0.0
+
+
+def test_simulator_stats_include_comprehensive_co2_keys():
+    cfg = SimulationConfig(
+        num_vehicles=6,
+        num_base_stations=4,
+        duration=30,
+        area_size=800,
+        seed=1,
+    )
+    sim = V2XSimulator(cfg)
+    sim.setup_network()
+    sim.setup_vehicles()
+    out = sim.run_algorithm("energy_aware")
+    st = out["stats"]
+    assert "co2_breakdown_comprehensive" in st
+    assert "total_kg" in st["co2_breakdown_comprehensive"]
+    assert "co2_scope_statement" in st

@@ -1,0 +1,492 @@
+{
+  "clear": {
+    "profile_name": "Clear/Sunny",
+    "per_seed": {
+      "42": {
+        "energy_saving_percent": 12.986416814738714,
+        "handoff_reduction_percent": 0.0,
+        "co2_saving_percent": 12.986416814738716,
+        "avg_energy_per_bit_ea": 1.0662887408165755e-08,
+        "avg_data_rate_ea": 81919274.7361012
+      },
+      "123": {
+        "energy_saving_percent": 13.296655026496119,
+        "handoff_reduction_percent": 0.33003300330033003,
+        "co2_saving_percent": 13.296655026496113,
+        "avg_energy_per_bit_ea": 1.0716749329644764e-08,
+        "avg_data_rate_ea": 81117243.00468123
+      },
+      "456": {
+        "energy_saving_percent": 13.258207035688695,
+        "handoff_reduction_percent": 0.0,
+        "co2_saving_percent": 13.25820703568868,
+        "avg_energy_per_bit_ea": 1.070965044827334e-08,
+        "avg_data_rate_ea": 81598510.84152511
+      },
+      "789": {
+        "energy_saving_percent": 13.421704797391202,
+        "handoff_reduction_percent": 0.0,
+        "co2_saving_percent": 13.42170479739121,
+        "avg_energy_per_bit_ea": 1.0786821940395458e-08,
+        "avg_data_rate_ea": 81594234.67042564
+      },
+      "1011": {
+        "energy_saving_percent": 13.49125941991731,
+        "handoff_reduction_percent": 0.0,
+        "co2_saving_percent": 13.491259419917299,
+        "avg_energy_per_bit_ea": 1.075306535834242e-08,
+        "avg_data_rate_ea": 81209235.78688583
+      }
+    },
+    "energy_saving_percent": {
+      "mean": 13.290848618846407,
+      "std": 0.19433588147993236,
+      "ci95_low": 13.049548751253582,
+      "ci95_high": 13.532148486439233
+    },
+    "handoff_reduction_percent": {
+      "mean": 0.066006600660066,
+      "std": 0.14759524603959007,
+      "ci95_low": -0.11725710265331968,
+      "ci95_high": 0.24927030397345168
+    },
+    "co2_saving_percent": {
+      "mean": 13.290848618846402,
+      "std": 0.19433588147993072,
+      "ci95_low": 13.049548751253578,
+      "ci95_high": 13.532148486439226
+    },
+    "avg_energy_per_bit_ea": {
+      "mean": 1.0725834896964348e-08,
+      "std": 4.681823296625574e-11,
+      "ci95_low": 1.0667702382630631e-08,
+      "ci95_high": 1.0783967411298065e-08
+    },
+    "avg_data_rate_ea": {
+      "mean": 81487699.8079238,
+      "std": 325832.06364964315,
+      "ci95_low": 81083125.86502959,
+      "ci95_high": 81892273.750818
+    }
+  },
+  "light_rain": {
+    "profile_name": "Light Rain",
+    "per_seed": {
+      "42": {
+        "energy_saving_percent": 17.972461182264947,
+        "handoff_reduction_percent": 0.0,
+        "co2_saving_percent": 17.97246118226495,
+        "avg_energy_per_bit_ea": 1.202058639026482e-08,
+        "avg_data_rate_ea": 115110211.16183883
+      },
+      "123": {
+        "energy_saving_percent": 18.659396385846247,
+        "handoff_reduction_percent": 0.33003300330033003,
+        "co2_saving_percent": 18.659396385846236,
+        "avg_energy_per_bit_ea": 1.2008709436957236e-08,
+        "avg_data_rate_ea": 114598786.77483927
+      },
+      "456": {
+        "energy_saving_percent": 19.054422435326206,
+        "handoff_reduction_percent": 0.32679738562091504,
+        "co2_saving_percent": 19.054422435326213,
+        "avg_energy_per_bit_ea": 1.1956267007854304e-08,
+        "avg_data_rate_ea": 115332965.28639297
+      },
+      "789": {
+        "energy_saving_percent": 18.987311853119586,
+        "handoff_reduction_percent": 0.34602076124567477,
+        "co2_saving_percent": 18.987311853119586,
+        "avg_energy_per_bit_ea": 1.2022389096068606e-08,
+        "avg_data_rate_ea": 114231754.62399608
+      },
+      "1011": {
+        "energy_saving_percent": 18.74493889485264,
+        "handoff_reduction_percent": 0.33557046979865773,
+        "co2_saving_percent": 18.744938894852645,
+        "avg_energy_per_bit_ea": 1.2081510647160978e-08,
+        "avg_data_rate_ea": 113400107.74561372
+      }
+    },
+    "energy_saving_percent": {
+      "mean": 18.683706150281925,
+      "std": 0.4300630200844508,
+      "ci95_low": 18.149712381284278,
+      "ci95_high": 19.21769991927957
+    },
+    "handoff_reduction_percent": {
+      "mean": 0.2676843239931155,
+      "std": 0.14981800239938842,
+      "ci95_low": 0.08166070413098975,
+      "ci95_high": 0.4537079438552412
+    },
+    "co2_saving_percent": {
+      "mean": 18.683706150281928,
+      "std": 0.4300630200844512,
+      "ci95_low": 18.14971238128428,
+      "ci95_high": 19.217699919279575
+    },
+    "avg_energy_per_bit_ea": {
+      "mean": 1.2017892515661189e-08,
+      "std": 4.4600378356591214e-11,
+      "ci95_low": 1.1962513831549544e-08,
+      "ci95_high": 1.2073271199772833e-08
+    },
+    "avg_data_rate_ea": {
+      "mean": 114534765.11853619,
+      "std": 766750.1455695659,
+      "ci95_low": 113582719.06716496,
+      "ci95_high": 115486811.16990742
+    }
+  },
+  "heavy_rain": {
+    "profile_name": "Heavy Rain",
+    "per_seed": {
+      "42": {
+        "energy_saving_percent": 41.41658521920709,
+        "handoff_reduction_percent": 0.6779661016949152,
+        "co2_saving_percent": 41.4165852192071,
+        "avg_energy_per_bit_ea": 1.2660088476371186e-08,
+        "avg_data_rate_ea": 117637726.12227452
+      },
+      "123": {
+        "energy_saving_percent": 41.3724296188139,
+        "handoff_reduction_percent": 0.33003300330033003,
+        "co2_saving_percent": 41.372429618813904,
+        "avg_energy_per_bit_ea": 1.2777437606792421e-08,
+        "avg_data_rate_ea": 116108858.0752722
+      },
+      "456": {
+        "energy_saving_percent": 41.45517093526624,
+        "handoff_reduction_percent": 0.6535947712418301,
+        "co2_saving_percent": 41.455170935266246,
+        "avg_energy_per_bit_ea": 1.2786091205416356e-08,
+        "avg_data_rate_ea": 115998523.32563004
+      },
+      "789": {
+        "energy_saving_percent": 41.342868090862666,
+        "handoff_reduction_percent": 1.0380622837370241,
+        "co2_saving_percent": 41.342868090862666,
+        "avg_energy_per_bit_ea": 1.2850378398021661e-08,
+        "avg_data_rate_ea": 114693796.0577499
+      },
+      "1011": {
+        "energy_saving_percent": 41.42246493961751,
+        "handoff_reduction_percent": 0.6711409395973155,
+        "co2_saving_percent": 41.42246493961751,
+        "avg_energy_per_bit_ea": 1.2914313291716841e-08,
+        "avg_data_rate_ea": 113956348.15905371
+      }
+    },
+    "energy_saving_percent": {
+      "mean": 41.40190376075348,
+      "std": 0.04424261108283632,
+      "ci95_low": 41.346969303385386,
+      "ci95_high": 41.45683821812157
+    },
+    "handoff_reduction_percent": {
+      "mean": 0.674159419914283,
+      "std": 0.250646559788169,
+      "ci95_low": 0.3629406103516862,
+      "ci95_high": 0.9853782294768798
+    },
+    "co2_saving_percent": {
+      "mean": 41.401903760753484,
+      "std": 0.04424261108283787,
+      "ci95_low": 41.34696930338539,
+      "ci95_high": 41.456838218121575
+    },
+    "avg_energy_per_bit_ea": {
+      "mean": 1.2797661795663694e-08,
+      "std": 9.467830566045276e-11,
+      "ci95_low": 1.2680103152114178e-08,
+      "ci95_high": 1.291522043921321e-08
+    },
+    "avg_data_rate_ea": {
+      "mean": 115679050.34799607,
+      "std": 1419651.1281689196,
+      "ci95_low": 113916320.65213937,
+      "ci95_high": 117441780.04385278
+    }
+  },
+  "snow": {
+    "profile_name": "Snow",
+    "per_seed": {
+      "42": {
+        "energy_saving_percent": 49.21255980801184,
+        "handoff_reduction_percent": 0.6779661016949152,
+        "co2_saving_percent": 49.21255980801184,
+        "avg_energy_per_bit_ea": 1.2452524750921978e-08,
+        "avg_data_rate_ea": 122929369.3354937
+      },
+      "123": {
+        "energy_saving_percent": 49.93660148742553,
+        "handoff_reduction_percent": 1.3201320132013201,
+        "co2_saving_percent": 49.936601487425534,
+        "avg_energy_per_bit_ea": 1.2447541460323681e-08,
+        "avg_data_rate_ea": 122603414.36878866
+      },
+      "456": {
+        "energy_saving_percent": 49.0161328501239,
+        "handoff_reduction_percent": 1.6339869281045754,
+        "co2_saving_percent": 49.0161328501239,
+        "avg_energy_per_bit_ea": 1.267964263358499e-08,
+        "avg_data_rate_ea": 120573747.84779896
+      },
+      "789": {
+        "energy_saving_percent": 49.364590259844576,
+        "handoff_reduction_percent": 1.0380622837370241,
+        "co2_saving_percent": 49.364590259844576,
+        "avg_energy_per_bit_ea": 1.2647137560018443e-08,
+        "avg_data_rate_ea": 120112703.1161877
+      },
+      "1011": {
+        "energy_saving_percent": 49.727800996841836,
+        "handoff_reduction_percent": 1.006711409395973,
+        "co2_saving_percent": 49.727800996841836,
+        "avg_energy_per_bit_ea": 1.2668679360284353e-08,
+        "avg_data_rate_ea": 119408498.55164799
+      }
+    },
+    "energy_saving_percent": {
+      "mean": 49.45153708044953,
+      "std": 0.3761169899631998,
+      "ci95_low": 48.98452615489946,
+      "ci95_high": 49.918548005999604
+    },
+    "handoff_reduction_percent": {
+      "mean": 1.1353717472267617,
+      "std": 0.359859692541622,
+      "ci95_low": 0.6885469225931541,
+      "ci95_high": 1.5821965718603694
+    },
+    "co2_saving_percent": {
+      "mean": 49.45153708044954,
+      "std": 0.3761169899632021,
+      "ci95_low": 48.98452615489946,
+      "ci95_high": 49.91854800599962
+    },
+    "avg_energy_per_bit_ea": {
+      "mean": 1.257910515302669e-08,
+      "std": 1.1841804701837425e-10,
+      "ci95_low": 1.2432069727306374e-08,
+      "ci95_high": 1.2726140578747005e-08
+    },
+    "avg_data_rate_ea": {
+      "mean": 121125546.6439834,
+      "std": 1558561.6276786607,
+      "ci95_low": 119190336.78191294,
+      "ci95_high": 123060756.50605385
+    }
+  },
+  "fog": {
+    "profile_name": "Fog/Mist",
+    "per_seed": {
+      "42": {
+        "energy_saving_percent": 29.52471485737443,
+        "handoff_reduction_percent": 0.3389830508474576,
+        "co2_saving_percent": 29.524714857374434,
+        "avg_energy_per_bit_ea": 1.1858287607258755e-08,
+        "avg_data_rate_ea": 125612979.79680811
+      },
+      "123": {
+        "energy_saving_percent": 29.783430963568218,
+        "handoff_reduction_percent": 0.33003300330033003,
+        "co2_saving_percent": 29.783430963568215,
+        "avg_energy_per_bit_ea": 1.1918433765363771e-08,
+        "avg_data_rate_ea": 124528315.24631263
+      },
+      "456": {
+        "energy_saving_percent": 29.773283202081117,
+        "handoff_reduction_percent": 0.6535947712418301,
+        "co2_saving_percent": 29.773283202081124,
+        "avg_energy_per_bit_ea": 1.1912490422402485e-08,
+        "avg_data_rate_ea": 125178998.15599987
+      },
+      "789": {
+        "energy_saving_percent": 29.544216504865318,
+        "handoff_reduction_percent": 0.34602076124567477,
+        "co2_saving_percent": 29.54421650486532,
+        "avg_energy_per_bit_ea": 1.200810091846697e-08,
+        "avg_data_rate_ea": 123381328.69073704
+      },
+      "1011": {
+        "energy_saving_percent": 29.721613166626064,
+        "handoff_reduction_percent": 0.33557046979865773,
+        "co2_saving_percent": 29.721613166626064,
+        "avg_energy_per_bit_ea": 1.2047328329815041e-08,
+        "avg_data_rate_ea": 122845498.12397169
+      }
+    },
+    "energy_saving_percent": {
+      "mean": 29.669451738903028,
+      "std": 0.12562412155134614,
+      "ci95_low": 29.51346878986675,
+      "ci95_high": 29.825434687939307
+    },
+    "handoff_reduction_percent": {
+      "mean": 0.40084041128679004,
+      "std": 0.14141264780338691,
+      "ci95_low": 0.22525341761865592,
+      "ci95_high": 0.5764274049549242
+    },
+    "co2_saving_percent": {
+      "mean": 29.669451738903028,
+      "std": 0.1256241215513449,
+      "ci95_low": 29.51346878986675,
+      "ci95_high": 29.825434687939307
+    },
+    "avg_energy_per_bit_ea": {
+      "mean": 1.1948928208661405e-08,
+      "std": 7.690470627812939e-11,
+      "ci95_low": 1.1853438403583417e-08,
+      "ci95_high": 1.2044418013739393e-08
+    },
+    "avg_data_rate_ea": {
+      "mean": 124309424.00276586,
+      "std": 1173431.9515281217,
+      "ci95_low": 122852415.79421142,
+      "ci95_high": 125766432.21132031
+    }
+  },
+  "thunderstorm": {
+    "profile_name": "Thunderstorm",
+    "per_seed": {
+      "42": {
+        "energy_saving_percent": 60.482785807040216,
+        "handoff_reduction_percent": 1.0169491525423728,
+        "co2_saving_percent": 60.48278580704021,
+        "avg_energy_per_bit_ea": 1.1821557229479102e-08,
+        "avg_data_rate_ea": 132949030.96107799
+      },
+      "123": {
+        "energy_saving_percent": 61.71519536514277,
+        "handoff_reduction_percent": 1.3201320132013201,
+        "co2_saving_percent": 61.71519536514277,
+        "avg_energy_per_bit_ea": 1.162822291222274e-08,
+        "avg_data_rate_ea": 132718006.19503526
+      },
+      "456": {
+        "energy_saving_percent": 61.22126671937531,
+        "handoff_reduction_percent": 1.6339869281045754,
+        "co2_saving_percent": 61.22126671937531,
+        "avg_energy_per_bit_ea": 1.1861720402303186e-08,
+        "avg_data_rate_ea": 131752416.74966054
+      },
+      "789": {
+        "energy_saving_percent": 61.16554461690323,
+        "handoff_reduction_percent": 2.0761245674740483,
+        "co2_saving_percent": 61.16554461690323,
+        "avg_energy_per_bit_ea": 1.192512599886544e-08,
+        "avg_data_rate_ea": 129354205.00805578
+      },
+      "1011": {
+        "energy_saving_percent": 61.976484780807276,
+        "handoff_reduction_percent": 1.006711409395973,
+        "co2_saving_percent": 61.97648478080728,
+        "avg_energy_per_bit_ea": 1.1810206451899162e-08,
+        "avg_data_rate_ea": 130606730.69338483
+      }
+    },
+    "energy_saving_percent": {
+      "mean": 61.31225545785376,
+      "std": 0.5747573586654666,
+      "ci95_low": 60.59859993789616,
+      "ci95_high": 62.02591097781136
+    },
+    "handoff_reduction_percent": {
+      "mean": 1.410780814143658,
+      "std": 0.4525195979320582,
+      "ci95_low": 0.8489035209097788,
+      "ci95_high": 1.972658107377537
+    },
+    "co2_saving_percent": {
+      "mean": 61.31225545785376,
+      "std": 0.5747573586654713,
+      "ci95_low": 60.598599937896154,
+      "ci95_high": 62.025910977811364
+    },
+    "avg_energy_per_bit_ea": {
+      "mean": 1.1809366598953925e-08,
+      "std": 1.1079656071054729e-10,
+      "ci95_low": 1.167179449839484e-08,
+      "ci95_high": 1.194693869951301e-08
+    },
+    "avg_data_rate_ea": {
+      "mean": 131476077.9214429,
+      "std": 1503865.7607310957,
+      "ci95_low": 129608781.94821177,
+      "ci95_high": 133343373.89467402
+    }
+  },
+  "dust_sand_storm": {
+    "profile_name": "Dust/Sand Storm",
+    "per_seed": {
+      "42": {
+        "energy_saving_percent": 48.63108444461028,
+        "handoff_reduction_percent": 0.6779661016949152,
+        "co2_saving_percent": 48.63108444461028,
+        "avg_energy_per_bit_ea": 1.2216990445468527e-08,
+        "avg_data_rate_ea": 126955173.29334056
+      },
+      "123": {
+        "energy_saving_percent": 49.49243091621624,
+        "handoff_reduction_percent": 0.6600660066006601,
+        "co2_saving_percent": 49.492430916216236,
+        "avg_energy_per_bit_ea": 1.220484173128028e-08,
+        "avg_data_rate_ea": 126877359.42450982
+      },
+      "456": {
+        "energy_saving_percent": 48.596914628678434,
+        "handoff_reduction_percent": 1.3071895424836601,
+        "co2_saving_percent": 48.59691462867843,
+        "avg_energy_per_bit_ea": 1.241476903797889e-08,
+        "avg_data_rate_ea": 124656216.46829265
+      },
+      "789": {
+        "energy_saving_percent": 48.882456454347576,
+        "handoff_reduction_percent": 1.0380622837370241,
+        "co2_saving_percent": 48.882456454347576,
+        "avg_energy_per_bit_ea": 1.2401306082792165e-08,
+        "avg_data_rate_ea": 124106123.64723589
+      },
+      "1011": {
+        "energy_saving_percent": 48.98475698966617,
+        "handoff_reduction_percent": 1.006711409395973,
+        "co2_saving_percent": 48.98475698966617,
+        "avg_energy_per_bit_ea": 1.2497678414690005e-08,
+        "avg_data_rate_ea": 122966561.08305977
+      }
+    },
+    "energy_saving_percent": {
+      "mean": 48.91752868670373,
+      "std": 0.36093834575036854,
+      "ci95_low": 48.469364537214275,
+      "ci95_high": 49.36569283619319
+    },
+    "handoff_reduction_percent": {
+      "mean": 0.9379990687824465,
+      "std": 0.271983257590174,
+      "ci95_low": 0.6002872497185467,
+      "ci95_high": 1.2757108878463463
+    },
+    "co2_saving_percent": {
+      "mean": 48.91752868670373,
+      "std": 0.36093834575036726,
+      "ci95_low": 48.46936453721428,
+      "ci95_high": 49.36569283619318
+    },
+    "avg_energy_per_bit_ea": {
+      "mean": 1.2347117142441973e-08,
+      "std": 1.2976629648468872e-10,
+      "ci95_low": 1.21859910039167e-08,
+      "ci95_high": 1.2508243280967246e-08
+    },
+    "avg_data_rate_ea": {
+      "mean": 125112286.78328773,
+      "std": 1756147.4373549619,
+      "ci95_low": 122931741.73478627,
+      "ci95_high": 127292831.8317892
+    }
+  }
+}

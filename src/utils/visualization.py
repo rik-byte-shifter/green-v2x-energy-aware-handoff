@@ -293,6 +293,69 @@ class ResultVisualizer:
         plt.savefig(out, dpi=300, bbox_inches='tight')
         plt.close(fig)
 
+    def plot_tx_power_distribution(self):
+        ea_stats = self.results['energy_aware']['stats']
+        rssi_stats = self.results['rssi']['stats']
+        ea = np.asarray(ea_stats.get('tx_power_samples_w', []), dtype=float) * 1000.0
+        rssi = np.asarray(rssi_stats.get('tx_power_samples_w', []), dtype=float) * 1000.0
+        if ea.size == 0 or rssi.size == 0:
+            return
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.hist(ea, bins=40, density=True, alpha=0.5, color='green', label='Energy-Aware')
+        ax.hist(rssi, bins=40, density=True, alpha=0.5, color='red', label='RSSI-Based')
+        ax.set_xlabel('TX power (mW)')
+        ax.set_ylabel('Density')
+        ax.set_title('TX Power Distribution')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        out = os.path.join(self.results_dir, 'tx_power_distribution.png')
+        plt.savefig(out, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+
+    def plot_bs_load_distribution(self):
+        ea_stats = self.results['energy_aware']['stats']
+        rssi_stats = self.results['rssi']['stats']
+        ea = np.asarray(ea_stats.get('bs_load_samples', []), dtype=float)
+        rssi = np.asarray(rssi_stats.get('bs_load_samples', []), dtype=float)
+        if ea.size == 0 or rssi.size == 0:
+            return
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.hist(ea, bins=30, density=True, alpha=0.5, color='green', label='Energy-Aware')
+        ax.hist(rssi, bins=30, density=True, alpha=0.5, color='red', label='RSSI-Based')
+        ax.set_xlabel('BS load (0..1)')
+        ax.set_ylabel('Density')
+        ax.set_title('Load per Base Station Distribution')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        out = os.path.join(self.results_dir, 'bs_load_distribution.png')
+        plt.savefig(out, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+
+    def plot_sinr_histogram(self):
+        ea_stats = self.results['energy_aware']['stats']
+        rssi_stats = self.results['rssi']['stats']
+        ea = np.asarray(ea_stats.get('sinr_samples_db', []), dtype=float)
+        rssi = np.asarray(rssi_stats.get('sinr_samples_db', []), dtype=float)
+        if ea.size == 0 or rssi.size == 0:
+            return
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.hist(ea, bins=40, density=True, alpha=0.5, color='green', label='Energy-Aware')
+        ax.hist(rssi, bins=40, density=True, alpha=0.5, color='red', label='RSSI-Based')
+        ax.set_xlabel('SINR (dB)')
+        ax.set_ylabel('Density')
+        ax.set_title('SINR Histogram')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        out = os.path.join(self.results_dir, 'sinr_histogram.png')
+        plt.savefig(out, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+
     def generate_all_plots(self, vehicles: Optional[List[Vehicle]] = None,
                           base_stations: Optional[List[BaseStation]] = None):
         print("\nGenerating visualization plots...")
@@ -302,6 +365,9 @@ class ResultVisualizer:
         self.plot_bar_comparison()
         self.plot_bar_co2_comparison()
         self.plot_per_vehicle_energy_cdf()
+        self.plot_tx_power_distribution()
+        self.plot_bs_load_distribution()
+        self.plot_sinr_histogram()
 
         if vehicles is not None and base_stations is not None:
             self.plot_network_topology(vehicles, base_stations)
