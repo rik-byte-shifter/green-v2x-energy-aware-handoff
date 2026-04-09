@@ -1,0 +1,27 @@
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Test and tool caches
+.pytest_cache/
+.mypy_cache/
+.cache/
+
+# Local env/secrets
+.env
+*.env
+
+# Logs
+*.log
+
+# Generated/temporary artifacts
+results_smoke/
+repomix-output.xml
+
+# Keep project paper local only
+energy_aware_handoff_project_overview_note.tex
