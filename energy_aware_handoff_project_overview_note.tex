@@ -64,7 +64,7 @@ The ICT sector accounts for a few percent of global electricity use \cite{malmod
 
 When you run \texttt{python main.py}, it:
 \begin{itemize}
-\item Creates a \textbf{sparse, high-fading vehicular scenario} (highway-like).
+\item Creates the baseline highway scenario via \texttt{SimulationConfig.sparse\_demonstration\_scenario()} (now configured for \textbf{overlapping coverage}: 16 BSs, 400 m radius, heavy-rain profile with 10 dB shadowing).
 \item Runs \textbf{5 random seeds}.
 \item For each seed runs \textbf{5 algorithms}:
 \item Energy-aware, RSSI, SINR, load-aware RSSI, naive nearest.
@@ -79,6 +79,7 @@ When you run \texttt{python main.py}, it:
 \item Also reports \textbf{Bangladesh-grid CO\textsubscript{2} sensitivity} using \texttt{SimulationConfig.bangladesh\_grid\_scenario()}.
 \item Optional standalone weather study: \texttt{python weather\_sweep.py} (cross-weather uncertainty with 95\% CI).
 \item Optional: \textbf{Comprehensive validation} (\texttt{python main.py --comprehensive-validation} or \texttt{python validation\_runner.py}): literature EPB checks, multi-duration extrapolation stability, extended CO\textsubscript{2} example, literature index printout.
+\item Practical runtime: this full suite is compute-heavy and typically takes \textbf{about 2--3 hours} on a laptop-class CPU.
 \end{itemize}
 
 
@@ -884,11 +885,34 @@ Inside \texttt{run\_algorithm(algorithm\_name)}:
 \item Supports CLI overrides for duration, time-step, number of vehicles, base stations, and weather subset for reproducible ablations.
 \end{itemize}
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{results/weather_sweep_energy_saving.png}
+\caption{Weather-sweep mean energy saving vs RSSI with uncertainty across seeds.}
+\label{fig:weather_sweep_energy_saving}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{results/weather_sweep_handoff_reduction.png}
+\caption{Weather-sweep handoff reduction vs RSSI across weather profiles.}
+\label{fig:weather_sweep_handoff_reduction}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{results/weather_sweep_co2_saving.png}
+\caption{Weather-sweep CO\textsubscript{2} saving vs RSSI across weather profiles.}
+\label{fig:weather_sweep_co2_saving}
+\end{figure}
+
 \subsection{6. Recent codebase fixes reflected in current results}
 \begin{itemize}
 \item \textbf{State reset fairness}: \texttt{V2XSimulator.run\_algorithm()} uses explicit network-state reset so each algorithm starts from clean BS load state.
 \item \textbf{Outage decomposition}: total outage is split into \texttt{coverage\_gap\_percent} and \texttt{sinr\_outage\_percent}, reducing ambiguity in failure attribution.
-\item \textbf{Scaling scenario correction}: \texttt{run\_scaling\_experiment()} now uses \texttt{SimulationConfig.scaling\_scenario()} to avoid sparse-coverage collapse at high load.
+\item \textbf{Scenario geometry correction}: \texttt{sparse\_demonstration\_scenario()} now uses \texttt{num\_base\_stations=16}, \texttt{bs\_coverage\_radius=400}, and \texttt{shadowing\_std\_db=10.0} so vehicles see overlapping candidate BSs and baseline algorithms remain differentiable.
+\item \textbf{Scaling scenario correction}: \texttt{run\_scaling\_experiment()} uses \texttt{SimulationConfig.scaling\_scenario()} to avoid high-load coverage collapse.
+\item \textbf{Capacity realism fix}: \texttt{BSConfig.max\_capacity} default is increased from 20 to 100, preventing artificial association blocking in 200-vehicle scalability runs.
 \item \textbf{Hardware-validation scope}: \texttt{EnergyModelValidator.validation\_passed} is based on in-scope OBU-side anchors; BS anchors are retained as contextual rows.
 \end{itemize}
 
@@ -941,6 +965,13 @@ These tests act like \textbf{unit + regression tests} to ensure that core modeli
 \item \textbf{\texttt{debug\_metrics.py}} --- quick sanity-check script for algorithm-selection differentiation in a minimal two-BS setup.
 \item \textbf{\texttt{requirements.txt}} --- reproducible Python dependency baseline for simulation, plotting, and tests.
 \end{itemize}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{results/extrapolation_validation.png}
+\caption{Multi-duration extrapolation validation for energy, CO\textsubscript{2}, and handoff-rate stability.}
+\label{fig:extrapolation_validation}
+\end{figure}
 
 
 \section{What is the aim of the project (in research terms)?}
@@ -1091,28 +1122,6 @@ These are reasonable simplifications for a \textbf{handoff \& energy} study, but
 \end{itemize}
 
 
-
-\section{If you want, next steps I can walk through}
-
-If you’d like even deeper detail, I can:
-\begin{itemize}
-\item Break down \textbf{each algorithm’s source code} line-by-line (e.g., \texttt{energy\_aware\_handoff.py}).
-\item Derive the \textbf{exact formula} for \texttt{calculate\_tx\_power\_required\_for\_target\_rx} and show how shadowing percentile enters.
-\item Show \textbf{concrete example numbers} for a single vehicle over a few steps to see energy and handoffs.
-\item Help you \textbf{modify the scenario} (e.g., urban highway, longer duration) and interpret new plots.
-\end{itemize}
-
-\paragraph*{1) Line-by-line algorithm walkthrough}
-The most useful deep-dive starts from a common interface view and then compares decision logic block by block. In practice, I can walk through \texttt{select\_best\_bs(...)}, \texttt{should\_handoff(...)}, and \texttt{execute\_handoff(...)} for Energy-Aware, RSSI, SINR, load-aware RSSI, and naive-nearest policies side by side. The review can explicitly map each code branch to its system objective: energy minimization, signal-quality maximization, load balancing, and stability protection. I can also annotate which lines are model assumptions versus implementation safeguards (e.g., capacity checks, fallback behavior, cooldown checks, and ping-pong accounting), so your methods section can cite behavior unambiguously.
-
-\paragraph*{2) Exact TX-power and shadowing derivation}
-I can provide a full derivation from link-budget fundamentals to the implemented function \texttt{calculate\_tx\_power\_required\_for\_target\_rx}. This includes: distance-dependent path loss, rain attenuation, log-normal shadowing margin, receiver target power, and conversion between dBm and linear watts. A key part is the reliability margin: when coverage is designed for a percentile (e.g., 95\%), the model effectively adds a positive margin proportional to shadowing standard deviation, which increases required transmit power. I can present the final closed-form expression used in code, explain each term physically, and show how changing weather profile parameters shifts required power and therefore energy-per-bit outcomes.
-
-\paragraph*{3) Concrete numerical trajectory example}
-For publication clarity, I can produce a worked micro-trace for one vehicle over several time steps: position, candidate BS metrics, selected BS, SINR, data rate, transmit power, per-step energy, and handoff trigger outcome. This makes the algorithm mechanics transparent and helps reviewers verify that performance gains are not black-box artifacts. The walkthrough can include one case where a handoff is blocked by hysteresis/cooldown and another where it is accepted due to sufficient EPB gain under QoS constraints. I can format this as a compact table-ready narrative you can directly adapt into the paper.
-
-\paragraph*{4) Scenario redesign and plot interpretation support}
-I can help you create targeted scenario variants (e.g., longer simulation duration, denser traffic, stronger shadowing, different weather, modified BS density, stricter outage threshold) and predict how each change should affect key metrics before running experiments. After execution, I can guide interpretation of each figure type: whether shifts are due to load balancing, power control, interference exposure, or mobility-induced instability. This is especially useful for writing discussion and threat-to-validity sections, where you need to explain not only ``what improved'' but also ``why it improved'' and ``under what conditions gains shrink.''
 
 
 \begin{thebibliography}{00}

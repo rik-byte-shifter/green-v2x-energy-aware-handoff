@@ -33,7 +33,7 @@ The simulator reports energy, EPB, throughput, handoff behavior, outage decompos
 
 ## Recent Fixes Integrated
 
-The current codebase already includes these four fixes:
+The current codebase already includes these fixes:
 
 1. **Network state reset between algorithm runs** (`simulations/simulator.py`)
    - `V2XSimulator.run_algorithm()` calls `_reset_network_state()` so each algorithm starts from clean BS load state.
@@ -53,6 +53,17 @@ The current codebase already includes these four fixes:
    - Anchors are tagged with `side` (`obu`/`bs`).
    - `validation_passed` is determined only from OBU in-scope anchors.
    - BS anchors are reported for context (`in_scope=False`) and do not fail validation.
+
+5. **Sparse baseline geometry corrected to avoid single-candidate behavior** (`simulations/config.py`)
+   - `sparse_demonstration_scenario()` now uses:
+     - `num_base_stations=16`
+     - `bs_coverage_radius=400`
+     - `shadowing_std_db=10.0`
+   - This creates overlapping coverage so RSSI/SINR/load-aware/EA are no longer forced into the same choice each step.
+
+6. **Base station capacity updated for scaling realism** (`src/models/basestation.py`)
+   - `BSConfig.max_capacity` default increased from `20` to `100`.
+   - Prevents high-load runs (especially 200-vehicle scaling) from artificial association blocking due to too-low toy capacity.
 
 Compatibility keys are also preserved in hardware validation output:
 - `mean_absolute_error`
@@ -131,6 +142,9 @@ This runs:
 - energy model sensitivity sweep
 - scenario diversity experiment
 - Bangladesh grid intensity sensitivity printout
+
+Runtime note:
+- `python main.py` is a full research suite (many nested multi-seed experiments) and typically takes about **2-3 hours** on a standard laptop CPU.
 
 ### 2) Comprehensive validation
 
@@ -265,7 +279,9 @@ Current suite covers:
 
 - Use fixed seeds for comparable runs (`SEEDS`, `SCALING_SEEDS`, `SENSITIVITY_SEEDS`, `SCENARIO_SEEDS` in `main.py`).
 - The baseline scenario in `main.py` is `SimulationConfig.sparse_demonstration_scenario()`.
+- Current sparse baseline settings are intentionally overlapping (`16` BS, `400 m` radius) to preserve algorithm differentiation.
 - The scaling study intentionally switches to `SimulationConfig.scaling_scenario()` for better connectivity at high load.
+- Base station default capacity is `BSConfig.max_capacity=100` for realistic high-vehicle scaling behavior.
 - Bangladesh-specific CO2 sensitivity uses `SimulationConfig.bangladesh_grid_scenario()` (`0.62 kg CO2/kWh`).
 
 ---

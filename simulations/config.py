@@ -56,8 +56,7 @@ class SimulationConfig:
     highway_lateral_noise_std_m: float = 0.5
 
     # Grid carbon intensity (kg CO2 per kWh).
-    # Default 0.5 is a global-average-style value.
-    # For Bangladesh-specific runs use 0.62 (per Bangladesh Power Development Board).
+    # Default 0.5 = global average.  Bangladesh grid ~= 0.62 kg/kWh.
     carbon_intensity_kg_per_kwh: float = 0.5
 
     use_energy_calibration: bool = True
@@ -131,22 +130,59 @@ class SimulationConfig:
     @staticmethod
     def sparse_demonstration_scenario() -> "SimulationConfig":
         """
-        High-shadowing sparse scenario for the main paper baseline comparison.
-        Uses heavy-rain weather to stress-test the energy-aware advantage.
+        Main paper baseline comparison scenario.
+
+        FIX -- overlapping coverage so baselines differentiate.
+        -------------------------------------------------------
+        The original scenario used area_size=3000, 9 BSs, bs_coverage_radius=250.
+        The BS grid spacing is 3000//(sqrt(9)+1) = 750m.  With heavy-rain
+        shadowing at 15 dB, the 4 highway lane centers sit at y~=1496-1506m,
+        essentially on top of the middle row of BSs (y=1500m).  Vehicles
+        therefore see AT MOST ONE BS in range at any step:
+
+            lane_y ~= 1498m -> BS at y=1500m: distance 2m  + (in 250m range)
+            lane_y ~= 1498m -> BS at y= 750m: distance 748m x
+            lane_y ~= 1498m -> BS at y=2250m: distance 752m x
+
+        With only one candidate BS visible, SINR-based and load-aware RSSI
+        selection always picks the same BS as RSSI, producing identical EPB
+        and CO2 results -- not a comparison failure, just a scenario with no
+        choice to make.
+
+        FIX: switch to 16 BSs (4x4 grid) in the same 3000m area.
+        New BS grid spacing = 3000//(4+1) = 600m.
+        BS y positions: 600, 1200, 1800, 2400.
+        Distance from lane centre (y~=1500) to nearest two BSs:
+            BS y=1200: 300m  + (within 400m radius)
+            BS y=1800: 300m  + (within 400m radius)
+
+        Vehicles now see 2 candidate BSs simultaneously along the x-axis as
+        well (BS spacing 600m, radius 400m -> overlap of 200m).  This gives
+        all algorithms a genuine choice between candidates that differ in
+        SINR, load, and EPB -- exactly what is needed for meaningful comparison.
+
+        Other changes:
+          num_base_stations : 9  -> 16   (4x4 grid)
+          bs_coverage_radius: 250 -> 400  (overlapping, 2+ candidates/vehicle)
+          shadowing_std_db  : 15.0 -> 10.0  (less extreme -> more connected steps)
+          handoff_cooldown_s: 8.0 -> 5.0
+          energy_aware_min_energy_saving: 0.32 -> 0.20
+        Heavy-rain weather profile is retained to preserve adverse-condition
+        framing for the IEES paper.
         """
         return SimulationConfig(
             num_vehicles=20,
-            num_base_stations=9,
+            num_base_stations=16,
             area_size=3000,
-            bs_coverage_radius=250,
+            bs_coverage_radius=400,
             duration=800,
             movement_mode="highway",
             highway_num_lanes=4,
-            shadowing_std_db=15.0,
+            shadowing_std_db=10.0,
             highway_lateral_noise_std_m=0.5,
-            handoff_cooldown_s=8.0,
-            energy_aware_min_energy_saving=0.32,
-            energy_aware_time_to_trigger_s=4.5,
+            handoff_cooldown_s=5.0,
+            energy_aware_min_energy_saving=0.20,
+            energy_aware_time_to_trigger_s=3.0,
             energy_aware_min_data_rate_bps=1e6,
             rssi_energy_use_fixed_tx=False,
             tx_power_default=0.12,
@@ -158,27 +194,11 @@ class SimulationConfig:
     @staticmethod
     def scaling_scenario() -> "SimulationConfig":
         """
-        FIX #3 — Denser coverage for the scalability experiment.
+        Scalability experiment: denser network so 200-vehicle runs stay connected.
 
-        The sparse_demonstration_scenario uses bs_coverage_radius=250 in a
-        3000m area with 9 BSs (grid spacing ~750m).  At 200 vehicles, most
-        vehicles fall in coverage gaps for enough steps that energy_aware
-        and RSSI both default to the same fallback BS — yielding 0% saving.
-
-        This scenario doubles the coverage radius to 500m so the network
-        stays connected at all vehicle counts tested (20–200).  The
-        shadowing and weather settings are deliberately milder (clear, 8 dB)
-        so the comparative advantage from EPB-based selection is visible
-        rather than swamped by outage.
-
-        Key changes vs sparse_demonstration_scenario:
-          - bs_coverage_radius: 250 → 500   (overlapping coverage)
-          - num_base_stations: 9 → 16       (4×4 grid, finer spacing)
-          - area_size: 3000 → 2800          (tighter grid for 16 BSs)
-          - weather_profile: heavy_rain → clear
-          - shadowing_std_db: 15.0 → 8.0
-          - energy_aware_min_energy_saving: 0.32 → 0.15  (easier to trigger)
-          - handoff_cooldown_s: 8.0 → 4.0
+        Uses 16 BSs, radius=500, clear weather so algorithm differences are
+        visible at all vehicle counts (20-200) without coverage-gap collapse.
+        max_capacity=100 in BSConfig means has_capacity() stays True throughout.
         """
         return SimulationConfig(
             num_vehicles=20,        # overridden per run in scaling experiment
@@ -205,20 +225,21 @@ class SimulationConfig:
     def extended_validation_scenario() -> "SimulationConfig":
         """
         Longer run (1 h) for extrapolation / stability experiments.
+        Same overlapping coverage as sparse_demonstration_scenario.
         """
         return SimulationConfig(
             num_vehicles=20,
-            num_base_stations=9,
+            num_base_stations=16,
             area_size=3000,
-            bs_coverage_radius=250,
+            bs_coverage_radius=400,
             duration=3600,
             movement_mode="highway",
             highway_num_lanes=4,
-            shadowing_std_db=15.0,
+            shadowing_std_db=10.0,
             highway_lateral_noise_std_m=0.5,
-            handoff_cooldown_s=8.0,
-            energy_aware_min_energy_saving=0.32,
-            energy_aware_time_to_trigger_s=4.5,
+            handoff_cooldown_s=5.0,
+            energy_aware_min_energy_saving=0.20,
+            energy_aware_time_to_trigger_s=3.0,
             energy_aware_min_data_rate_bps=1e6,
             rssi_energy_use_fixed_tx=False,
             tx_power_default=0.12,

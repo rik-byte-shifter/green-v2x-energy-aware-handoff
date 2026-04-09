@@ -16,58 +16,58 @@
   "pa_efficiency_sweep": [
     {
       "pa_efficiency": 0.25,
-      "energy_saving_percent_mean": 41.49843417783702,
-      "energy_saving_percent_std": 0.021934115749829175,
+      "energy_saving_percent_mean": 88.38428662079795,
+      "energy_saving_percent_std": 0.06393611298105384,
       "per_seed_energy_saving_percent": [
-        41.52036829358685,
-        41.47650006208719
+        88.3203505078169,
+        88.448222733779
       ]
     },
     {
       "pa_efficiency": 0.35,
-      "energy_saving_percent_mean": 41.38674817984048,
-      "energy_saving_percent_std": 0.022182243655301193,
+      "energy_saving_percent_mean": 88.34033063664273,
+      "energy_saving_percent_std": 0.06297828796409988,
       "per_seed_energy_saving_percent": [
-        41.40893042349578,
-        41.36456593618518
+        88.27735234867863,
+        88.40330892460683
       ]
     },
     {
       "pa_efficiency": 0.45,
-      "energy_saving_percent_mean": 41.28064671488435,
-      "energy_saving_percent_std": 0.02241771492464295,
+      "energy_saving_percent_mean": 88.29854811317247,
+      "energy_saving_percent_std": 0.06206848549623345,
       "per_seed_energy_saving_percent": [
-        41.30306442980899,
-        41.258228999959705
+        88.23647962767623,
+        88.3606165986687
       ]
     }
   ],
   "tx_circuit_power_sweep": [
     {
       "p_tx_circuit_w": 0.05,
-      "energy_saving_percent_mean": 41.50926078250705,
-      "energy_saving_percent_std": 0.022308582040864167,
+      "energy_saving_percent_mean": 88.3349096265753,
+      "energy_saving_percent_std": 0.06286021061782066,
       "per_seed_energy_saving_percent": [
-        41.53156936454791,
-        41.486952200466185
+        88.27204941595748,
+        88.39776983719312
       ]
     },
     {
       "p_tx_circuit_w": 0.1,
-      "energy_saving_percent_mean": 41.38674817984048,
-      "energy_saving_percent_std": 0.022182243655301193,
+      "energy_saving_percent_mean": 88.34033063664273,
+      "energy_saving_percent_std": 0.06297828796409988,
       "per_seed_energy_saving_percent": [
-        41.40893042349578,
-        41.36456593618518
+        88.27735234867863,
+        88.40330892460683
       ]
     },
     {
       "p_tx_circuit_w": 0.15,
-      "energy_saving_percent_mean": 41.27253610950142,
-      "energy_saving_percent_std": 0.02206594950307661,
+      "energy_saving_percent_mean": 88.34541653272098,
+      "energy_saving_percent_std": 0.0630890759183842,
       "per_seed_energy_saving_percent": [
-        41.2946020590045,
-        41.25047015999834
+        88.28232745680259,
+        88.40850560863936
       ]
     }
   ]

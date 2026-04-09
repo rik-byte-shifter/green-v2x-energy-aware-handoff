@@ -26,32 +26,32 @@
     },
     {
       "num_vehicles": 50,
-      "energy_saving_percent_mean": 55.73906606118579,
-      "energy_saving_percent_std": 0.19054510301746874,
+      "energy_saving_percent_mean": 55.73510262906242,
+      "energy_saving_percent_std": 0.18525601264291133,
       "per_seed_energy_saving_percent": [
         55.68788565798059,
         55.5355349430215,
-        55.99377758255528
+        55.98188728618515
       ]
     },
     {
       "num_vehicles": 100,
-      "energy_saving_percent_mean": 56.59890411070959,
-      "energy_saving_percent_std": 0.22340741994255645,
+      "energy_saving_percent_mean": 55.77947896590562,
+      "energy_saving_percent_std": 0.26462286418842046,
       "per_seed_energy_saving_percent": [
-        56.80294133068412,
-        56.28797661489675,
-        56.7057943865479
+        55.94003807231841,
+        55.406447862083574,
+        55.991950963314885
       ]
     },
     {
       "num_vehicles": 200,
-      "energy_saving_percent_mean": 0.0,
-      "energy_saving_percent_std": 0.0,
+      "energy_saving_percent_mean": 55.81816744399773,
+      "energy_saving_percent_std": 0.11065504318759185,
       "per_seed_energy_saving_percent": [
-        0.0,
-        0.0,
-        0.0
+        55.7902457700235,
+        55.96547779529265,
+        55.69877876667702
       ]
     }
   ]
