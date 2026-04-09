@@ -1,0 +1,128 @@
+{
+  "hardware_validation": {
+    "validation_passed": true,
+    "scope_note": "Validation is performed on the OBU (vehicular radio) uplink chain. BS-side anchors are informational only \u2014 the simulator models vehicular uplink energy, not base-station transmit chains.",
+    "obu_anchors_passed": "1/1",
+    "comparisons": [
+      {
+        "device": "OBU_802.11p",
+        "side": "obu",
+        "measured_epb": 1.17e-07,
+        "model_epb": 1.1607142857142858e-07,
+        "absolute_error": 9.285714285714208e-10,
+        "relative_error_percent": 0.7936507936507871,
+        "reference": "IEEE 802.11p / WAVE OBU class (illustrative DSRC scale)",
+        "within_acceptable_range": true,
+        "in_scope": true
+      },
+      {
+        "device": "5G_BS_macro",
+        "side": "bs",
+        "measured_epb": 1.7e-06,
+        "model_epb": 5.726785714285715e-07,
+        "absolute_error": 1.1273214285714285e-06,
+        "relative_error_percent": 66.31302521008404,
+        "reference": "3GPP TR 38.840; Bj\u00f6rnson & Sanguinetti (2020) OJ-COMS",
+        "within_acceptable_range": true,
+        "in_scope": false
+      },
+      {
+        "device": "LTE_BS_small",
+        "side": "bs",
+        "measured_epb": 1.1e-06,
+        "model_epb": 5.726785714285715e-07,
+        "absolute_error": 5.273214285714286e-07,
+        "relative_error_percent": 47.938311688311686,
+        "reference": "Auer et al., IEEE Wireless Commun., 2011",
+        "within_acceptable_range": true,
+        "in_scope": false
+      },
+      {
+        "device": "LTE_BS_macro",
+        "side": "bs",
+        "measured_epb": 2e-06,
+        "model_epb": 5.726785714285715e-07,
+        "absolute_error": 1.4273214285714284e-06,
+        "relative_error_percent": 71.36607142857142,
+        "reference": "Auer et al., IEEE Wireless Commun., 2011 (macro RBS order-of-magnitude)",
+        "within_acceptable_range": true,
+        "in_scope": false
+      }
+    ],
+    "mean_absolute_error": 0.7936507936507871,
+    "max_deviation_percent": 0.7936507936507871,
+    "mean_absolute_error_obu": 0.7936507936507871
+  },
+  "model_epb_operating_points": {
+    "bs_energy_per_bit": 5.726785714285715e-07,
+    "obu_energy_per_bit": 1.1607142857142858e-07
+  },
+  "extrapolation_validation": {
+    "durations_tested": [
+      300,
+      900,
+      1800,
+      3600,
+      7200
+    ],
+    "metrics": {
+      "energy_per_second": {
+        "values_by_duration": {
+          "300": 8.285666920246115,
+          "900": 8.319593839940415,
+          "1800": 8.27112605126316,
+          "3600": 8.290530055670734,
+          "7200": 8.314820229234927
+        },
+        "mean": 8.29634741927107,
+        "std": 0.01825197504254245,
+        "coefficient_of_variation_percent": 0.22000012921525045,
+        "stable": true
+      },
+      "co2_per_second": {
+        "values_by_duration": {
+          "300": 1.1507870722564047e-06,
+          "900": 1.1554991444361687e-06,
+          "1800": 1.1487675071198832e-06,
+          "3600": 1.1514625077320465e-06,
+          "7200": 1.1548361429492956e-06
+        },
+        "mean": 1.1522704748987596e-06,
+        "std": 2.534996533686497e-09,
+        "coefficient_of_variation_percent": 0.22000012921525444,
+        "stable": true
+      },
+      "handoffs_per_second": {
+        "values_by_duration": {
+          "300": 0.37333333333333335,
+          "900": 0.3622222222222222,
+          "1800": 0.37222222222222223,
+          "3600": 0.3852777777777778,
+          "7200": 0.37041666666666667
+        },
+        "mean": 0.37269444444444444,
+        "std": 0.007400367024598537,
+        "coefficient_of_variation_percent": 1.9856392105951206,
+        "stable": true
+      }
+    },
+    "linearity_analysis": {
+      "energy_per_second": "Stable (CV=0.2%) - linear extrapolation reasonable for this metric",
+      "co2_per_second": "Stable (CV=0.2%) - linear extrapolation reasonable for this metric",
+      "handoffs_per_second": "Stable (CV=2.0%) - linear extrapolation reasonable for this metric"
+    },
+    "extrapolation_valid": true
+  },
+  "co2_example_breakdown": {
+    "communication_direct_kg": 0.001388888888888889,
+    "infrastructure_overhead_kg": 0.0006944444444444445,
+    "embodied_carbon_kg": 0.2053388090349076,
+    "total_kg": 0.2074221423682409,
+    "scope_notes": [
+      "Direct communication energy (TX chain, baseband proxy)",
+      "BS infrastructure overhead (cooling + PSU losses; factor ~1.50 on energy)",
+      "Embodied carbon amortized over 10 years"
+    ]
+  },
+  "co2_scope": "CO2 Emissions Scope:\nINCLUDED:\n  - Direct communication energy (TX/RX circuits, baseband processing)\n  - Power amplifier energy consumption\n  - BS infrastructure overhead (cooling, PSU losses, PUE-style factor)\n  - Embodied carbon of BS hardware (amortized over 10 years)\n\nEXCLUDED (out of scope):\n  - Vehicle propulsion energy for transportation\n  - Manufacturing emissions of vehicles and OBUs\n  - Network backbone / transport network energy\n  - End-user smartphone/tablet energy (non-OBU)\n"
+}

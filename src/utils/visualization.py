@@ -158,16 +158,16 @@ class ResultVisualizer:
         rssi_stats = self.results['rssi']['stats']
         naive_stats = self.results.get('naive_nearest', {}).get('stats')
 
-        labels = ['Energy/Bit (uJ)', 'TX Power (mW)', 'Handoffs']
+        labels = ['Energy/Bit (nJ)', 'TX Power (mW)', 'Handoffs']
 
         ea_values = [
-            ea_stats['avg_energy_per_bit'] * 1e6,
+            ea_stats['avg_energy_per_bit'] * 1e9,
             ea_stats['avg_tx_power'] * 1000,
             ea_stats['total_handoffs']
         ]
 
         rssi_values = [
-            rssi_stats['avg_energy_per_bit'] * 1e6,
+            rssi_stats['avg_energy_per_bit'] * 1e9,
             rssi_stats['avg_tx_power'] * 1000,
             rssi_stats['total_handoffs']
         ]
@@ -175,7 +175,7 @@ class ResultVisualizer:
         naive_values = None
         if naive_stats:
             naive_values = [
-                naive_stats['avg_energy_per_bit'] * 1e6,
+                naive_stats['avg_energy_per_bit'] * 1e9,
                 naive_stats['avg_tx_power'] * 1000,
                 naive_stats['total_handoffs']
             ]
@@ -198,9 +198,20 @@ class ResultVisualizer:
         ax.legend()
         ax.grid(True, alpha=0.3, axis='y')
 
+        def _fmt_bar_label(height: float) -> str:
+            if height >= 100:
+                return f'{height:.0f}'
+            if height >= 10:
+                return f'{height:.1f}'
+            if height >= 1:
+                return f'{height:.2f}'
+            if height >= 0.1:
+                return f'{height:.3f}'
+            return f'{height:.2e}'
+
         for bar in bars1:
             height = bar.get_height()
-            ax.annotate(f'{height:.1f}',
+            ax.annotate(_fmt_bar_label(height),
                        xy=(bar.get_x() + bar.get_width() / 2, height),
                        xytext=(0, 3),
                        textcoords="offset points",
@@ -208,7 +219,7 @@ class ResultVisualizer:
 
         for bar in bars2:
             height = bar.get_height()
-            ax.annotate(f'{height:.1f}',
+            ax.annotate(_fmt_bar_label(height),
                        xy=(bar.get_x() + bar.get_width() / 2, height),
                        xytext=(0, 3),
                        textcoords="offset points",
@@ -217,7 +228,7 @@ class ResultVisualizer:
         if bars3:
             for bar in bars3:
                 height = bar.get_height()
-                ax.annotate(f'{height:.1f}',
+                ax.annotate(_fmt_bar_label(height),
                            xy=(bar.get_x() + bar.get_width() / 2, height),
                            xytext=(0, 3),
                            textcoords="offset points",
@@ -233,26 +244,62 @@ class ResultVisualizer:
         rssi_stats = self.results['rssi']['stats']
         naive_stats = self.results.get('naive_nearest', {}).get('stats')
 
-        labels = ['Total CO2 (g)', 'CO2 / veh / yr (g)']
-        ea_vals = [ea_stats['co2_grams'], ea_stats['co2_kg_per_vehicle_per_year'] * 1000.0]
-        r_vals = [rssi_stats['co2_grams'], rssi_stats['co2_kg_per_vehicle_per_year'] * 1000.0]
-        x = np.arange(len(labels))
-        width = 0.25
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.bar(x - width, ea_vals, width, label='Energy-Aware', color='green', alpha=0.8)
-        ax.bar(x, r_vals, width, label='RSSI-Based', color='red', alpha=0.8)
+        labels = ['Energy-Aware', 'RSSI-Based']
+        total_co2_vals = [ea_stats['co2_grams'], rssi_stats['co2_grams']]
+        per_vehicle_year_vals = [
+            ea_stats['co2_kg_per_vehicle_per_year'] * 1000.0,
+            rssi_stats['co2_kg_per_vehicle_per_year'] * 1000.0,
+        ]
         if naive_stats:
-            n_vals = [
-                naive_stats['co2_grams'],
-                naive_stats['co2_kg_per_vehicle_per_year'] * 1000.0,
-            ]
-            ax.bar(x + width, n_vals, width, label='Naive Nearest', color='#ff7f0e', alpha=0.85)
-        ax.set_xticks(x)
-        ax.set_xticklabels(labels)
-        ax.set_ylabel('Grams CO2 (reporting)')
-        ax.set_title('Carbon Emissions (operational, grid intensity from config)')
-        ax.legend()
-        ax.grid(True, alpha=0.3, axis='y')
+            labels.append('Naive Nearest')
+            total_co2_vals.append(naive_stats['co2_grams'])
+            per_vehicle_year_vals.append(
+                naive_stats['co2_kg_per_vehicle_per_year'] * 1000.0
+            )
+
+        x = np.arange(len(labels))
+        colors = ['green', 'red'] + (['#ff7f0e'] if naive_stats else [])
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+        bars_total = axes[0].bar(x, total_co2_vals, color=colors, alpha=0.8)
+        axes[0].set_xticks(x)
+        axes[0].set_xticklabels(labels, rotation=15)
+        axes[0].set_ylabel('CO2 (g)')
+        axes[0].set_title('Total CO2 During Simulated Interval')
+        axes[0].grid(True, alpha=0.3, axis='y')
+
+        bars_annual = axes[1].bar(x, per_vehicle_year_vals, color=colors, alpha=0.8)
+        axes[1].set_xticks(x)
+        axes[1].set_xticklabels(labels, rotation=15)
+        axes[1].set_ylabel('CO2 / vehicle / year (g)')
+        axes[1].set_title('Annualized CO2 Intensity per Vehicle')
+        axes[1].grid(True, alpha=0.3, axis='y')
+
+        for bar in bars_total:
+            height = float(bar.get_height())
+            axes[0].annotate(
+                f'{height:.3f}',
+                xy=(bar.get_x() + bar.get_width() / 2, height),
+                xytext=(0, 3),
+                textcoords='offset points',
+                ha='center',
+                va='bottom',
+                fontsize=9,
+            )
+
+        for bar in bars_annual:
+            height = float(bar.get_height())
+            axes[1].annotate(
+                f'{height:.2f}',
+                xy=(bar.get_x() + bar.get_width() / 2, height),
+                xytext=(0, 3),
+                textcoords='offset points',
+                ha='center',
+                va='bottom',
+                fontsize=9,
+            )
+
+        fig.suptitle('Carbon Emissions (operational, grid intensity from config)')
         plt.tight_layout()
         out = os.path.join(self.results_dir, 'bar_co2_comparison.png')
         plt.savefig(out, dpi=300, bbox_inches='tight')

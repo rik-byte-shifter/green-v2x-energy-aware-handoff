@@ -1,4 +1,7 @@
 {
+  "scenario": "scaling_scenario",
+  "bs_coverage_radius": 500,
+  "num_base_stations": 16,
   "vehicle_counts": [
     20,
     50,
@@ -13,32 +16,32 @@
   "rows": [
     {
       "num_vehicles": 20,
-      "energy_saving_percent_mean": 41.414728591095745,
-      "energy_saving_percent_std": 0.03380450328013064,
+      "energy_saving_percent_mean": 55.58186151074278,
+      "energy_saving_percent_std": 0.16464901572957438,
       "per_seed_energy_saving_percent": [
-        41.41658521920709,
-        41.3724296188139,
-        41.45517093526624
+        55.696972362590294,
+        55.349017561488836,
+        55.69959460814924
       ]
     },
     {
       "num_vehicles": 50,
-      "energy_saving_percent_mean": 42.15664851997131,
-      "energy_saving_percent_std": 0.09597451439264224,
+      "energy_saving_percent_mean": 55.73906606118579,
+      "energy_saving_percent_std": 0.19054510301746874,
       "per_seed_energy_saving_percent": [
-        42.28772040623218,
-        42.121637674602695,
-        42.06058747907906
+        55.68788565798059,
+        55.5355349430215,
+        55.99377758255528
       ]
     },
     {
       "num_vehicles": 100,
-      "energy_saving_percent_mean": 45.51655414794363,
-      "energy_saving_percent_std": 3.651562385396757,
+      "energy_saving_percent_mean": 56.59890411070959,
+      "energy_saving_percent_std": 0.22340741994255645,
       "per_seed_energy_saving_percent": [
-        46.838390175591805,
-        40.53239384173352,
-        49.17887842650557
+        56.80294133068412,
+        56.28797661489675,
+        56.7057943865479
       ]
     },
     {

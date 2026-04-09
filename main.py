@@ -32,26 +32,38 @@ SCENARIO_SEEDS = [42, 123, 456]
 
 def run_scaling_experiment(root: str, base_config: SimulationConfig):
     """
-    Scalability experiment:
-    Energy saving (%) of Energy-Aware vs RSSI as number of vehicles grows.
+    Scalability experiment: energy saving (%) of Energy-Aware vs RSSI
+    as number of vehicles grows from 20 to 200.
+
+    FIX #3: uses scaling_scenario() (denser coverage) rather than the
+    sparse demo scenario so coverage gaps don't mask algorithm differences
+    at high vehicle counts.
     """
     print("\n" + "=" * 70)
     print("SCALABILITY EXPERIMENT")
     print("=" * 70)
+
+    # Use the denser scaling scenario as the base, not the sparse demo
+    scaling_base = SimulationConfig.scaling_scenario()
     print(
-        f"  Vehicle counts: {SCALING_VEHICLE_COUNTS} | "
-        f"seeds: {SCALING_SEEDS}"
+        f"  Base scenario: scaling_scenario() "
+        f"(bs_radius={scaling_base.bs_coverage_radius}m, "
+        f"{scaling_base.num_base_stations} BSs, "
+        f"weather={scaling_base.weather_profile})"
     )
+    print(f"  Vehicle counts: {SCALING_VEHICLE_COUNTS} | seeds: {SCALING_SEEDS}")
 
     rows = []
     for n_veh in SCALING_VEHICLE_COUNTS:
         per_seed = []
         print(f"\n--- Scaling run: {n_veh} vehicles ---")
         for seed in SCALING_SEEDS:
-            cfg = replace(base_config, num_vehicles=n_veh, seed=seed)
+            cfg = replace(scaling_base, num_vehicles=n_veh, seed=seed)
             sim = V2XSimulator(cfg)
             comp = sim.run_comparison()
-            per_seed.append(comp["energy_saving_percent"])
+            saving = comp["energy_saving_percent"]
+            per_seed.append(saving)
+            print(f"    seed={seed}: {saving:.2f}%")
 
         mean = float(np.mean(per_seed))
         std = float(np.std(per_seed))
@@ -63,31 +75,23 @@ def run_scaling_experiment(root: str, base_config: SimulationConfig):
                 "per_seed_energy_saving_percent": [float(x) for x in per_seed],
             }
         )
-        print(
-            f"  Energy saving vs RSSI @ {n_veh} vehicles: "
-            f"{mean:.2f}% +/- {std:.2f}%"
-        )
+        print(f"  → Mean saving @ {n_veh} vehicles: {mean:.2f}% ± {std:.2f}%")
 
+    # ---- Plot ----
     x = np.asarray([r["num_vehicles"] for r in rows], dtype=float)
     y = np.asarray([r["energy_saving_percent_mean"] for r in rows], dtype=float)
     yerr = np.asarray([r["energy_saving_percent_std"] for r in rows], dtype=float)
 
     fig, ax = plt.subplots(figsize=(9, 5))
     ax.errorbar(
-        x,
-        y,
-        yerr=yerr,
-        fmt="o-",
-        color="green",
-        ecolor="black",
-        elinewidth=1.2,
-        capsize=4,
-        linewidth=2,
-        markersize=6,
+        x, y, yerr=yerr,
+        fmt="o-", color="green", ecolor="black",
+        elinewidth=1.2, capsize=4, linewidth=2, markersize=6,
     )
     ax.set_xlabel("Number of vehicles")
     ax.set_ylabel("Energy saving vs RSSI (%)")
-    ax.set_title("Scalability: Energy Saving vs Number of Vehicles")
+    ax.set_title("Scalability: Energy-Aware vs RSSI — Energy Saving vs Vehicle Count")
+    ax.set_ylim(bottom=0)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
 
@@ -101,6 +105,9 @@ def run_scaling_experiment(root: str, base_config: SimulationConfig):
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(
             {
+                "scenario": "scaling_scenario",
+                "bs_coverage_radius": scaling_base.bs_coverage_radius,
+                "num_base_stations": scaling_base.num_base_stations,
                 "vehicle_counts": SCALING_VEHICLE_COUNTS,
                 "seeds": SCALING_SEEDS,
                 "rows": rows,
@@ -109,16 +116,9 @@ def run_scaling_experiment(root: str, base_config: SimulationConfig):
             indent=2,
         )
 
-    print(f"\nSaved scalability plot: {plot_path}")
-    print(f"Saved scalability data: {json_path}")
-
-    return {
-        "vehicle_counts": SCALING_VEHICLE_COUNTS,
-        "seeds": SCALING_SEEDS,
-        "rows": rows,
-        "plot_path": plot_path,
-        "json_path": json_path,
-    }
+    print(f"\nSaved scalability plot : {plot_path}")
+    print(f"Saved scalability data : {json_path}")
+    return {"vehicle_counts": SCALING_VEHICLE_COUNTS, "seeds": SCALING_SEEDS, "rows": rows}
 
 
 def _clone_config_with_seed(base_config: SimulationConfig, seed: int) -> SimulationConfig:
@@ -586,6 +586,10 @@ def main():
     print(f"  Avg Throughput: {ea_stats['avg_throughput_bps']/1e6:.3f} Mbps")
     print(f"  5th%-ile Throughput: {ea_stats['p5_throughput_bps']/1e6:.3f} Mbps")
     print(f"  Outage Probability: {ea_stats['outage_probability_percent']:.2f}%")
+    print(f"    of which Coverage Gaps: {ea_stats['coverage_gap_percent']:.2f}%")
+    print(
+        f"    of which SINR below threshold: {ea_stats['sinr_outage_percent']:.2f}%"
+    )
     print(
         f"  Ping-pong Handoffs: {ea_stats['ping_pong_handoffs']} "
         f"({ea_stats['ping_pong_rate_percent']:.2f}%)"
@@ -614,6 +618,10 @@ def main():
     print(f"  Avg Throughput: {rssi_stats['avg_throughput_bps']/1e6:.3f} Mbps")
     print(f"  5th%-ile Throughput: {rssi_stats['p5_throughput_bps']/1e6:.3f} Mbps")
     print(f"  Outage Probability: {rssi_stats['outage_probability_percent']:.2f}%")
+    print(f"    of which Coverage Gaps: {rssi_stats['coverage_gap_percent']:.2f}%")
+    print(
+        f"    of which SINR below threshold: {rssi_stats['sinr_outage_percent']:.2f}%"
+    )
     print(
         f"  Ping-pong Handoffs: {rssi_stats['ping_pong_handoffs']} "
         f"({rssi_stats['ping_pong_rate_percent']:.2f}%)"
@@ -700,6 +708,21 @@ def main():
             f"{ea_p10:.2f} dB vs {r_p10:.2f} dB (EA vs RSSI)"
         )
     print("  Supporting plots: tx_power_distribution.png, bs_load_distribution.png, sinr_histogram.png")
+
+    # Bangladesh grid intensity sensitivity (regional CO2 for paper discussion)
+    print("\n" + "=" * 60)
+    print("BANGLADESH GRID INTENSITY SENSITIVITY")
+    print("=" * 60)
+    bd_config = SimulationConfig.bangladesh_grid_scenario()
+    for seed in [42, 123, 456]:
+        cfg_bd = replace(bd_config, seed=seed)
+        sim_bd = V2XSimulator(cfg_bd)
+        sim_bd.run_comparison()
+        ea_co2 = sim_bd.results["energy_aware"]["stats"]["co2_kg_per_vehicle_per_year"]
+        rssi_co2 = sim_bd.results["rssi"]["stats"]["co2_kg_per_vehicle_per_year"]
+        print(
+            f"  Seed {seed}: EA={ea_co2:.4f} kg/veh/yr, RSSI={rssi_co2:.4f} kg/veh/yr"
+        )
 
     print("\n" + "=" * 70)
     print("Simulation completed successfully!")

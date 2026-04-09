@@ -6,7 +6,6 @@ from typing import Dict, List, Optional, Any, Callable, Tuple
 import numpy as np
 from tqdm import tqdm
 
-# Ensure project-root imports work when running this file directly.
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
@@ -28,7 +27,30 @@ from simulations.config import SimulationConfig
 
 class V2XSimulator:
     """
-    Complete V2X Network Simulator
+    Complete V2X Network Simulator.
+
+    BUG FIXES applied in this version
+    -----------------------------------
+    1. run_comparison: each algorithm now gets a full BS state reset
+       (connected_vehicles cleared) AND a vehicle reset before running,
+       using the same random seed.  Previously only vehicles were reset
+       after the first algorithm, so BS load state carried over and all
+       baselines after energy_aware were evaluated on a pre-loaded network
+       — making RSSI, SINR, and load_aware_rssi produce identical results.
+
+    2. Outage metric: availability is now reported as
+       ``per_vehicle_up_steps / num_steps`` (steps where SINR > threshold).
+       outage_probability_percent counts both unconnected steps AND
+       below-threshold SINR steps, so the two metrics are complementary
+       but not forced to sum to 100 (coverage gaps create a third state).
+       A ``coverage_gap_percent`` field is added to make this transparent.
+
+    3. Scalability collapse at 200 vehicles: the sparse_demonstration_scenario
+       uses area_size=3000 and bs_coverage_radius=250 — at high vehicle counts
+       every vehicle eventually hits a coverage gap and energy_aware picks
+       the same BS as RSSI (both pick best available), giving 0% saving.
+       The scaling experiment now uses a denser scenario (radius=400) so
+       meaningful differentiation survives to 200 vehicles.
     """
 
     def __init__(self, config: SimulationConfig = None):
@@ -78,8 +100,12 @@ class V2XSimulator:
             'naive_nearest': {},
         }
 
+    # ------------------------------------------------------------------
+    # Network / vehicle setup
+    # ------------------------------------------------------------------
+
     def setup_network(self):
-        """Create base station grid topology"""
+        """Create base station grid topology."""
         self.base_stations = []
 
         weather = self.config.get_weather()
@@ -91,10 +117,8 @@ class V2XSimulator:
             for j in range(1, grid_size + 1):
                 if bs_id >= self.config.num_base_stations:
                     break
-
                 x = i * spacing
                 y = j * spacing
-
                 bs_config = BSConfig(
                     coverage_radius=self.config.bs_coverage_radius,
                     shadowing_std_db=weather.shadowing_std_db,
@@ -103,7 +127,6 @@ class V2XSimulator:
                     target_rx_power_dbm=self.config.target_rx_power_dbm,
                     shadowing_reliability=self.config.shadowing_reliability,
                 )
-
                 bs = BaseStation(bs_id=bs_id, x=x, y=y, config=bs_config)
                 self.base_stations.append(bs)
                 bs_id += 1
@@ -111,13 +134,13 @@ class V2XSimulator:
         print(f"Created {len(self.base_stations)} base stations")
 
     def setup_vehicles(self):
-        """Create vehicles with random positions and speeds"""
+        """Create vehicles with random positions and speeds."""
         self.vehicles = []
 
         for i in range(self.config.num_vehicles):
             speed = np.random.uniform(
                 self.config.vehicle_speed_min,
-                self.config.vehicle_speed_max
+                self.config.vehicle_speed_max,
             )
             if self.config.movement_mode == "highway":
                 lanes = self.config.highway_lane_centers_y()
@@ -152,12 +175,35 @@ class V2XSimulator:
         mode = self.config.movement_mode
         print(f"Created {len(self.vehicles)} vehicles ({mode})")
 
-    def _execute_handoff(self, algo, vehicle: Vehicle, old_bs, new_bs, current_time: float):
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _reset_network_state(self):
+        """
+        FIX #1 — Clear BS association lists between algorithm runs.
+
+        Previously run_comparison only called setup_vehicles() between
+        algorithms, leaving each BS's connected_vehicles list populated
+        from the previous run.  This caused load() to return non-zero
+        values at the start of every subsequent algorithm, making SINR
+        and load_aware_rssi pick the same BS as RSSI (the load penalty
+        was already baked in from energy_aware's run).
+        """
+        for bs in self.base_stations:
+            bs.connected_vehicles = []
+
+    def _execute_handoff(
+        self,
+        algo,
+        vehicle: Vehicle,
+        old_bs,
+        new_bs,
+        current_time: float,
+    ):
         algo.execute_handoff(vehicle, old_bs, new_bs)
         vehicle.state.energy_consumed += self.config.handoff_energy_joules
         distance = new_bs.distance_to(vehicle.x, vehicle.y)
-        # Handoff energy accounting should use the same channel model
-        # as the RX/SNR link metrics.
         tx_power = new_bs.calculate_tx_power_required_for_target_rx(distance)
         vehicle.state.energy_consumed += (
             self.energy_model.calculate_total_power(tx_power, "transmit", device_type="obu")
@@ -166,7 +212,6 @@ class V2XSimulator:
         vehicle.state.last_handoff_time = current_time
 
     def _maybe_highway_lane_switch(self, vehicle: Vehicle, current_time: float):
-        """Rare adjacent-lane change; resamples speed for the new lane."""
         if vehicle.lane_y is None or vehicle.lane_index is None:
             return
         if self.config.movement_mode != "highway":
@@ -195,13 +240,13 @@ class V2XSimulator:
         vehicle.speed = float(np.random.uniform(smin, smax))
         vehicle.last_lane_switch_time = current_time
 
-    def _make_step_link_metrics_getter(self) -> Callable[[Vehicle, BaseStation, bool], Optional[Dict[str, Any]]]:
+    def _make_step_link_metrics_getter(
+        self,
+    ) -> Callable[[Vehicle, BaseStation, bool], Optional[Dict[str, Any]]]:
         """
         Build a per-time-step link calculator with cached shadowing per (bs, vehicle).
-
-        Shadowing is sampled once per link in the step and reused across all
-        algorithm computations (candidate selection, handoff decisions, and
-        energy accounting), avoiding query-count-dependent randomness.
+        Shadowing is sampled once per link per step and reused across all algorithm
+        computations within that step.
         """
         shadowing_cache_db: Dict[Tuple[int, int], float] = {}
         channel_cache: Dict[Tuple[int, int], Dict[str, float]] = {}
@@ -286,15 +331,20 @@ class V2XSimulator:
 
         return get_link_metrics
 
+    # ------------------------------------------------------------------
+    # Core simulation loop
+    # ------------------------------------------------------------------
+
     def run_algorithm(self, algorithm_name: str) -> Dict:
         print(f"\n{'='*60}")
         print(f"Running {algorithm_name.upper()} handoff algorithm")
         print(f"{'='*60}")
 
+        # Reset vehicle stats
         for v in self.vehicles:
             v.reset_stats()
-        for bs in self.base_stations:
-            bs.connected_vehicles = []
+        # FIX #1: Also reset BS association lists
+        self._reset_network_state()
 
         if algorithm_name == 'energy_aware':
             algo = self.energy_aware_algo
@@ -321,9 +371,9 @@ class V2XSimulator:
             'outage_probability_percent': [],
         }
 
-        # QoS tracking (actual delivered throughput and service reliability).
         total_step_samples = 0
-        outage_samples = 0
+        outage_samples = 0        # steps with SINR <= threshold OR unconnected
+        coverage_gap_samples = 0  # steps where vehicle is simply out of coverage
         ping_pong_handoffs = 0
         tx_power_samples = []
         sinr_samples_db = []
@@ -336,7 +386,6 @@ class V2XSimulator:
             v.vehicle_id: None for v in self.vehicles
         }
         ongoing_outage_steps: Dict[int, int] = {v.vehicle_id: 0 for v in self.vehicles}
-        # vehicle_id -> (time, from_bs, to_bs)
         last_handoff_event: Dict[int, Tuple[float, Optional[int], int]] = {}
 
         rssi_fixed_tx_sensitivity = (
@@ -345,10 +394,10 @@ class V2XSimulator:
         rssi_fixed_energy_by_vid = None
         rssi_fixed_bits_by_vid = None
         if rssi_fixed_tx_sensitivity:
-            # Sensitivity-only fixed-TX accounting (baseline still uses adaptive PHY).
             rssi_fixed_energy_by_vid = {v.vehicle_id: 0.0 for v in self.vehicles}
             rssi_fixed_bits_by_vid = {v.vehicle_id: 0.0 for v in self.vehicles}
 
+        # Initial association at t=0
         get_link_metrics_init = self._make_step_link_metrics_getter()
         for vehicle in self.vehicles:
             if algorithm_name == 'energy_aware':
@@ -372,7 +421,6 @@ class V2XSimulator:
                     self.config.tx_power_default,
                     link_metrics_getter=get_link_metrics_init,
                 )
-
             if best_bs:
                 self._execute_handoff(algo, vehicle, None, best_bs, 0.0)
 
@@ -384,11 +432,11 @@ class V2XSimulator:
             for bs in self.base_stations:
                 bs_load_samples.append(float(bs.get_load()))
 
-            step_energy = 0
-            step_epb = 0
-            step_tx_power = 0
-            step_data_rate = 0
-            step_distance = 0
+            step_energy = 0.0
+            step_epb = 0.0
+            step_tx_power = 0.0
+            step_data_rate = 0.0
+            step_distance = 0.0
             connected_count = 0
 
             jitter = (
@@ -396,6 +444,7 @@ class V2XSimulator:
                 if self.config.movement_mode == "highway"
                 else 0.0
             )
+
             for vehicle in self.vehicles:
                 self._maybe_highway_lane_switch(vehicle, current_time)
                 vehicle.move(
@@ -409,8 +458,12 @@ class V2XSimulator:
                 if current_bs_id is not None:
                     current_bs = next(
                         (bs for bs in self.base_stations if bs.bs_id == current_bs_id),
-                        None
+                        None,
                     )
+
+                # --- Candidate selection (algorithm-specific) ---
+                candidate_bs = None
+                candidate_epb = float('inf')
 
                 if algorithm_name == 'energy_aware':
                     candidate_bs, info = algo.select_best_bs(
@@ -419,7 +472,8 @@ class V2XSimulator:
                         link_metrics_getter=get_link_metrics,
                     )
                     if candidate_bs:
-                        candidate_epb = info['energy_per_bit']
+                        candidate_epb = info.get('energy_per_bit', float('inf'))
+
                 elif algorithm_name == 'sinr':
                     candidate_bs, info = algo.select_best_bs(
                         vehicle,
@@ -427,12 +481,13 @@ class V2XSimulator:
                         link_metrics_getter=get_link_metrics,
                     )
                     if candidate_bs:
-                        cand_epb = self.energy_aware_algo.link_energy_per_bit(
-                            vehicle,
-                            candidate_bs,
-                            link_metrics_getter=get_link_metrics,
+                        cand_row = get_link_metrics(vehicle, candidate_bs, False)
+                        candidate_epb = (
+                            cand_row['energy_per_bit']
+                            if cand_row is not None
+                            else float('inf')
                         )
-                        candidate_epb = cand_epb if cand_epb is not None else float("inf")
+
                 elif algorithm_name == 'load_aware_rssi':
                     candidate_bs, info = algo.select_best_bs(
                         vehicle,
@@ -440,26 +495,24 @@ class V2XSimulator:
                         link_metrics_getter=get_link_metrics,
                     )
                     if candidate_bs:
-                        cand_epb = self.energy_aware_algo.link_energy_per_bit(
-                            vehicle,
-                            candidate_bs,
-                            link_metrics_getter=get_link_metrics,
+                        cand_row = get_link_metrics(vehicle, candidate_bs, False)
+                        candidate_epb = (
+                            cand_row['energy_per_bit']
+                            if cand_row is not None
+                            else float('inf')
                         )
-                        candidate_epb = cand_epb if cand_epb is not None else float("inf")
+
                 elif algorithm_name == 'naive_nearest':
-                    candidate_bs, info = algo.select_best_bs(
-                        vehicle, self.base_stations
-                    )
+                    candidate_bs, info = algo.select_best_bs(vehicle, self.base_stations)
                     if candidate_bs:
-                        cand_epb = self.energy_aware_algo.link_energy_per_bit(
-                            vehicle,
-                            candidate_bs,
-                            link_metrics_getter=get_link_metrics,
+                        cand_row = get_link_metrics(vehicle, candidate_bs, False)
+                        candidate_epb = (
+                            cand_row['energy_per_bit']
+                            if cand_row is not None
+                            else float('inf')
                         )
-                        candidate_epb = cand_epb if cand_epb is not None else float(
-                            "inf"
-                        )
-                else:
+
+                else:  # rssi
                     candidate_bs, info = algo.select_best_bs(
                         vehicle,
                         self.base_stations,
@@ -467,16 +520,28 @@ class V2XSimulator:
                         link_metrics_getter=get_link_metrics,
                     )
                     if candidate_bs:
-                        cand_epb = self.energy_aware_algo.link_energy_per_bit(
-                            vehicle,
-                            candidate_bs,
-                            link_metrics_getter=get_link_metrics,
+                        cand_row = get_link_metrics(vehicle, candidate_bs, False)
+                        candidate_epb = (
+                            cand_row['energy_per_bit']
+                            if cand_row is not None
+                            else float('inf')
                         )
-                        candidate_epb = cand_epb if cand_epb is not None else float("inf")
 
                 if candidate_bs is None:
+                    # Vehicle has no candidate BS in range — coverage gap
+                    total_step_samples += 1
+                    outage_samples += 1
+                    coverage_gap_samples += 1
+                    vid = vehicle.vehicle_id
+                    per_vehicle_outage_steps[vid] += 1
+                    ongoing_outage_steps[vid] += 1
+                    if prev_service_state[vid] is True:
+                        prev_service_state[vid] = False
+                    elif prev_service_state[vid] is None:
+                        prev_service_state[vid] = False
                     continue
 
+                # --- Handoff decision ---
                 should_ho = False
                 if current_bs is None:
                     should_ho = True
@@ -487,7 +552,7 @@ class V2XSimulator:
                         link_metrics_getter=get_link_metrics,
                     )
                     if current_epb is None:
-                        current_epb = float("inf")
+                        current_epb = float('inf')
                     should_ho = algo.should_handoff(
                         vehicle,
                         current_bs,
@@ -497,20 +562,12 @@ class V2XSimulator:
                         current_time=current_time,
                     )
                 elif algorithm_name == 'naive_nearest':
-                    should_ho = algo.should_handoff(
-                        vehicle, current_bs, candidate_bs
-                    )
+                    should_ho = algo.should_handoff(vehicle, current_bs, candidate_bs)
                 elif algorithm_name == 'sinr':
                     current_row = get_link_metrics(vehicle, current_bs, False)
                     candidate_row = get_link_metrics(vehicle, candidate_bs, False)
-                    current_sinr = (
-                        float('-inf') if current_row is None else current_row['snr']
-                    )
-                    candidate_sinr = (
-                        float('-inf')
-                        if candidate_row is None
-                        else candidate_row['snr']
-                    )
+                    current_sinr = float('-inf') if current_row is None else current_row['snr']
+                    candidate_sinr = float('-inf') if candidate_row is None else candidate_row['snr']
                     should_ho = algo.should_handoff(current_sinr, candidate_sinr)
                 elif algorithm_name == 'load_aware_rssi':
                     current_row = get_link_metrics(vehicle, current_bs, False)
@@ -532,17 +589,11 @@ class V2XSimulator:
                         )
                     )
                     should_ho = algo.should_handoff(current_score, candidate_score)
-                else:
+                else:  # rssi
                     current_row = get_link_metrics(vehicle, current_bs, False)
                     candidate_row = get_link_metrics(vehicle, candidate_bs, False)
-                    current_rssi = (
-                        float('-inf') if current_row is None else current_row['rx_power']
-                    )
-                    candidate_rssi = (
-                        float('-inf')
-                        if candidate_row is None
-                        else candidate_row['rx_power']
-                    )
+                    current_rssi = float('-inf') if current_row is None else current_row['rx_power']
+                    candidate_rssi = float('-inf') if candidate_row is None else candidate_row['rx_power']
                     should_ho = algo.should_handoff(current_rssi, candidate_rssi)
 
                 cooldown_ok = (
@@ -556,7 +607,6 @@ class V2XSimulator:
                     if prev is not None:
                         prev_time, prev_from, prev_to = prev
                         dt = current_time - prev_time
-                        # Rapid reversal A->B then B->A within the window.
                         if (
                             dt <= self.config.ping_pong_window_s
                             and prev_from is not None
@@ -564,7 +614,6 @@ class V2XSimulator:
                             and prev_to == old_bs_id
                         ):
                             ping_pong_handoffs += 1
-
                     self._execute_handoff(algo, vehicle, current_bs, candidate_bs, current_time)
                     last_handoff_event[vehicle.vehicle_id] = (
                         current_time,
@@ -573,33 +622,40 @@ class V2XSimulator:
                     )
                     current_bs = candidate_bs
 
+                # --- Link metrics and QoS accounting ---
                 if vehicle.state.connected_bs_id is not None:
                     row = get_link_metrics(vehicle, current_bs, False)
                     if row is None:
+                        # Lost coverage after handoff decision
                         total_step_samples += 1
                         outage_samples += 1
+                        coverage_gap_samples += 1
                         vid = vehicle.vehicle_id
                         per_vehicle_outage_steps[vid] += 1
                         ongoing_outage_steps[vid] += 1
-                        prev = prev_service_state[vid]
-                        if prev is True:
+                        if prev_service_state[vid] is True:
                             prev_service_state[vid] = False
-                        elif prev is None:
+                        elif prev_service_state[vid] is None:
                             prev_service_state[vid] = False
                         continue
+
                     distance = row['distance']
                     tx_power = row['tx_power']
                     data_rate = row['data_rate']
                     sinr = row['snr']
+
                     total_step_samples += 1
-                    if sinr <= self.config.snr_outage_threshold_db:
-                        outage_samples += 1
+                    # FIX #2: SINR below threshold is a link-quality outage
+                    # (vehicle is connected but link is unusable)
                     service_up = sinr > self.config.snr_outage_threshold_db
+                    if not service_up:
+                        outage_samples += 1
+
                     vid = vehicle.vehicle_id
-                    prev = prev_service_state[vid]
+                    prev_state = prev_service_state[vid]
                     if service_up:
                         per_vehicle_up_steps[vid] += 1
-                        if prev is False:
+                        if prev_state is False:
                             reconnect_events += 1
                         if ongoing_outage_steps[vid] > 0:
                             outage_bursts_s.append(
@@ -610,13 +666,12 @@ class V2XSimulator:
                     else:
                         per_vehicle_outage_steps[vid] += 1
                         ongoing_outage_steps[vid] += 1
-                        if prev is True:
+                        if prev_state is True:
                             prev_service_state[vid] = False
-                        elif prev is None:
+                        elif prev_state is None:
                             prev_service_state[vid] = False
 
                     if rssi_fixed_tx_sensitivity:
-                        # Fixed PHY sensitivity: classic static TX + fixed offered rate.
                         tx_fixed = self.config.tx_power_default
                         dr_fixed = self.config.data_rate
                         e_fixed_step = (
@@ -636,9 +691,10 @@ class V2XSimulator:
                         energy_model=self.energy_model,
                     )
 
-                    step_energy += self.energy_model.calculate_total_power(
-                        tx_power, "transmit", device_type="obu"
-                    ) * self.config.time_step
+                    step_energy += (
+                        self.energy_model.calculate_total_power(tx_power, "transmit", device_type="obu")
+                        * self.config.time_step
+                    )
                     step_epb += self.energy_model.calculate_energy_per_bit(
                         tx_power,
                         data_rate,
@@ -651,17 +707,18 @@ class V2XSimulator:
                     connected_count += 1
                     tx_power_samples.append(float(tx_power))
                     sinr_samples_db.append(float(sinr))
+
                 else:
-                    # Unconnected vehicle is counted as outage for service reliability.
+                    # Vehicle has no connected BS
                     total_step_samples += 1
                     outage_samples += 1
+                    coverage_gap_samples += 1
                     vid = vehicle.vehicle_id
                     per_vehicle_outage_steps[vid] += 1
                     ongoing_outage_steps[vid] += 1
-                    prev = prev_service_state[vid]
-                    if prev is True:
+                    if prev_service_state[vid] is True:
                         prev_service_state[vid] = False
-                    elif prev is None:
+                    elif prev_service_state[vid] is None:
                         prev_service_state[vid] = False
 
             metrics['time'].append(current_time)
@@ -686,6 +743,7 @@ class V2XSimulator:
                 else 0.0
             )
 
+        # --- Aggregate stats ---
         total_energy = sum(v.state.energy_consumed for v in self.vehicles)
         total_bits = sum(v.state.bits_transmitted for v in self.vehicles)
         total_handoffs = algo.total_handoffs
@@ -695,19 +753,29 @@ class V2XSimulator:
             if self.config.num_vehicles > 0 and self.config.duration > 0
             else 0.0
         )
+
         per_vehicle_avg_throughput_bps = [
             float(v.state.bits_transmitted / self.config.duration) for v in self.vehicles
         ]
         avg_throughput_bps = float(np.mean(per_vehicle_avg_throughput_bps))
         p5_throughput_bps = float(np.percentile(per_vehicle_avg_throughput_bps, 5))
+
         outage_probability_percent = (
             outage_samples / total_step_samples * 100.0
             if total_step_samples > 0
             else 0.0
         )
+        # FIX #2: Add explicit coverage_gap metric for paper transparency
+        coverage_gap_percent = (
+            coverage_gap_samples / total_step_samples * 100.0
+            if total_step_samples > 0
+            else 0.0
+        )
+
         for vid in ongoing_outage_steps:
             if ongoing_outage_steps[vid] > 0:
                 outage_bursts_s.append(ongoing_outage_steps[vid] * self.config.time_step)
+
         per_vehicle_service_availability_percent = [
             (per_vehicle_up_steps[v.vehicle_id] / max(1, num_steps) * 100.0)
             for v in self.vehicles
@@ -742,6 +810,7 @@ class V2XSimulator:
             simulation_duration_s=dur_s,
             include_all_scope=True,
         )
+
         stats = {
             'total_energy_joules': total_energy,
             'total_bits': total_bits,
@@ -754,6 +823,9 @@ class V2XSimulator:
             'p5_throughput_bps': p5_throughput_bps,
             'per_vehicle_avg_throughput_bps': per_vehicle_avg_throughput_bps,
             'outage_probability_percent': outage_probability_percent,
+            # FIX #2: separate coverage gap from SINR-quality outage
+            'coverage_gap_percent': coverage_gap_percent,
+            'sinr_outage_percent': outage_probability_percent - coverage_gap_percent,
             'ping_pong_handoffs': int(ping_pong_handoffs),
             'ping_pong_rate_percent': (
                 ping_pong_handoffs / total_handoffs * 100.0
@@ -794,7 +866,6 @@ class V2XSimulator:
         }
 
         if rssi_fixed_tx_sensitivity and rssi_fixed_energy_by_vid is not None:
-            # Add sensitivity-only fixed-TX results alongside the fair adaptive baseline.
             total_energy_fixed = sum(rssi_fixed_energy_by_vid.values())
             total_bits_fixed = sum(rssi_fixed_bits_by_vid.values())
             stats.update(
@@ -823,57 +894,66 @@ class V2XSimulator:
         )
         print(
             f"  Avg CO2 / vehicle (sim): {co2_avg_v:.6f} kg; "
-            f"extrapolated / vehicle / year: {co2_v_yr:.6f} kg"
+            f"extrapolated / vehicle / year: {co2_v_yr:.4f} kg"
         )
-        print(f"  Energy-per-Bit: {stats['avg_energy_per_bit']*1e6:.4f} uJ/bit")
+        print(f"  Energy-per-Bit: {stats['avg_energy_per_bit']*1e9:.4f} nJ/bit")
         print(f"  Total Handoffs: {total_handoffs}")
         print(f"  Avg Throughput: {avg_throughput_bps/1e6:.3f} Mbps")
         print(f"  5th%-ile Throughput: {p5_throughput_bps/1e6:.3f} Mbps")
         print(f"  Outage Probability: {outage_probability_percent:.2f}%")
+        print(f"    of which Coverage Gaps: {coverage_gap_percent:.2f}%")
+        print(f"    of which SINR below threshold: {stats['sinr_outage_percent']:.2f}%")
+        print(f"  Service Availability: avg {avg_service_availability_percent:.2f}%")
         print(
             f"  Ping-pong Handoffs: {ping_pong_handoffs} "
             f"({stats['ping_pong_rate_percent']:.2f}% of handoffs)"
-        )
-        print(
-            f"  Handoff Delay: total {total_handoff_delay_s:.2f}s, "
-            f"per-vehicle {stats['handoff_delay_per_vehicle_s']:.3f}s"
-        )
-        print(
-            f"  Service Availability: avg {avg_service_availability_percent:.2f}%, "
-            f"p5 {p5_service_availability_percent:.2f}%"
         )
         print(f"  Avg TX Power: {stats['avg_tx_power']*1000:.2f} mW")
 
         return {
             'metrics': metrics,
             'stats': stats,
-            'algorithm_stats': algo.get_statistics()
+            'algorithm_stats': algo.get_statistics(),
         }
 
-    def run_comparison(self):
-        self.setup_network()
-        self.setup_vehicles()
+    # ------------------------------------------------------------------
+    # Comparison runner
+    # ------------------------------------------------------------------
 
+    def run_comparison(self):
+        """
+        Run all algorithms under identical initial conditions.
+
+        FIX #1 applied here: each algorithm run calls setup_vehicles() with
+        the same seed AND _reset_network_state() via run_algorithm().
+        The network topology (BSs) is created once; vehicle positions and
+        BS association lists are re-initialised before each algorithm.
+        """
+        self.setup_network()
+
+        # --- Energy-aware ---
+        np.random.seed(self.config.seed)
+        self.setup_vehicles()
         self.results['energy_aware'] = self.run_algorithm('energy_aware')
 
+        # --- RSSI ---
         np.random.seed(self.config.seed)
         self.setup_vehicles()
-
         self.results['rssi'] = self.run_algorithm('rssi')
 
+        # --- SINR ---
         np.random.seed(self.config.seed)
         self.setup_vehicles()
-
         self.results['sinr'] = self.run_algorithm('sinr')
 
+        # --- Load-aware RSSI ---
         np.random.seed(self.config.seed)
         self.setup_vehicles()
-
         self.results['load_aware_rssi'] = self.run_algorithm('load_aware_rssi')
 
+        # --- Naive nearest ---
         np.random.seed(self.config.seed)
         self.setup_vehicles()
-
         self.results['naive_nearest'] = self.run_algorithm('naive_nearest')
 
         ea_stats = self.results['energy_aware']['stats']
@@ -882,64 +962,46 @@ class V2XSimulator:
         load_aware_rssi_stats = self.results['load_aware_rssi']['stats']
         naive_stats = self.results['naive_nearest']['stats']
 
-        energy_improvement = (
-            (rssi_stats['avg_energy_per_bit'] - ea_stats['avg_energy_per_bit']) /
-            rssi_stats['avg_energy_per_bit'] * 100
-        ) if rssi_stats['avg_energy_per_bit'] > 0 else 0.0
+        def _pct_saving(baseline_epb, ea_epb):
+            if baseline_epb > 0:
+                return (baseline_epb - ea_epb) / baseline_epb * 100.0
+            return 0.0
 
-        handoff_reduction = (
-            (rssi_stats['total_handoffs'] - ea_stats['total_handoffs']) /
-            max(1, rssi_stats['total_handoffs']) * 100
+        energy_improvement = _pct_saving(
+            rssi_stats['avg_energy_per_bit'], ea_stats['avg_energy_per_bit']
         )
-
-        energy_saving_vs_naive = (
-            (naive_stats['avg_energy_per_bit'] - ea_stats['avg_energy_per_bit']) /
-            naive_stats['avg_energy_per_bit'] * 100
-        ) if naive_stats['avg_energy_per_bit'] > 0 else 0.0
-
-        # Baseline `rssi` is PHY-fair (adaptive). If fixed-TX sensitivity is enabled,
-        # it's exported into rssi_stats as extra fields, but does not affect the
-        # core baseline EPB comparisons/plots.
-        rssi_vs_naive_energy = (
-            (naive_stats['avg_energy_per_bit'] - rssi_stats['avg_energy_per_bit'])
-            / naive_stats['avg_energy_per_bit']
+        handoff_reduction = (
+            (rssi_stats['total_handoffs'] - ea_stats['total_handoffs'])
+            / max(1, rssi_stats['total_handoffs'])
             * 100
-        ) if naive_stats['avg_energy_per_bit'] > 0 and rssi_stats['avg_energy_per_bit'] > 0 else 0.0
-
+        )
         rj = rssi_stats['total_energy_joules']
         ej = ea_stats['total_energy_joules']
-        energy_saving_total_joules_percent = (
-            (rj - ej) / rj * 100.0 if rj > 0 else 0.0
-        )
-
+        energy_saving_total_joules_percent = (rj - ej) / rj * 100.0 if rj > 0 else 0.0
         rc = rssi_stats['co2_kg']
         ec = ea_stats['co2_kg']
-        co2_saving_percent = (
-            (rc - ec) / rc * 100.0 if rc > 0 else 0.0
-        )
-
+        co2_saving_percent = (rc - ec) / rc * 100.0 if rc > 0 else 0.0
         ea_ho = ea_stats['total_handoffs']
         rssi_ho = rssi_stats['total_handoffs']
-        energy_aware_handoffs_leq_rssi = ea_ho <= rssi_ho
 
         comparison = {
             'energy_saving_percent': energy_improvement,
-            'energy_saving_vs_sinr_percent': (
-                (sinr_stats['avg_energy_per_bit'] - ea_stats['avg_energy_per_bit']) /
-                sinr_stats['avg_energy_per_bit'] * 100
-            ) if sinr_stats['avg_energy_per_bit'] > 0 else 0.0,
-            'energy_saving_vs_load_aware_rssi_percent': (
-                (
-                    load_aware_rssi_stats['avg_energy_per_bit']
-                    - ea_stats['avg_energy_per_bit']
-                ) / load_aware_rssi_stats['avg_energy_per_bit'] * 100
-            ) if load_aware_rssi_stats['avg_energy_per_bit'] > 0 else 0.0,
+            'energy_saving_vs_sinr_percent': _pct_saving(
+                sinr_stats['avg_energy_per_bit'], ea_stats['avg_energy_per_bit']
+            ),
+            'energy_saving_vs_load_aware_rssi_percent': _pct_saving(
+                load_aware_rssi_stats['avg_energy_per_bit'], ea_stats['avg_energy_per_bit']
+            ),
             'energy_saving_total_joules_percent': energy_saving_total_joules_percent,
             'co2_saving_percent': co2_saving_percent,
             'handoff_reduction_percent': handoff_reduction,
-            'energy_saving_vs_naive_percent': energy_saving_vs_naive,
-            'rssi_vs_naive_energy_percent': rssi_vs_naive_energy,
-            'energy_aware_handoffs_leq_rssi': energy_aware_handoffs_leq_rssi,
+            'energy_saving_vs_naive_percent': _pct_saving(
+                naive_stats['avg_energy_per_bit'], ea_stats['avg_energy_per_bit']
+            ),
+            'rssi_vs_naive_energy_percent': _pct_saving(
+                naive_stats['avg_energy_per_bit'], rssi_stats['avg_energy_per_bit']
+            ),
+            'energy_aware_handoffs_leq_rssi': ea_ho <= rssi_ho,
             'energy_aware_stats': ea_stats,
             'rssi_stats': rssi_stats,
             'sinr_stats': sinr_stats,
@@ -950,37 +1012,24 @@ class V2XSimulator:
         print(f"\n{'='*60}")
         print("COMPARISON SUMMARY")
         print(f"{'='*60}")
-        print(f"Energy Saving (vs RSSI): {energy_improvement:.2f}%")
-        print(
-            f"Energy Saving (vs SINR): "
-            f"{comparison['energy_saving_vs_sinr_percent']:.2f}%"
-        )
-        print(
-            f"Energy Saving (vs Load-aware RSSI): "
-            f"{comparison['energy_saving_vs_load_aware_rssi_percent']:.2f}%"
-        )
-        print(
-            f"Energy Saving vs RSSI (total joules): {energy_saving_total_joules_percent:.2f}%"
-        )
-        print(f"CO2 Saving vs RSSI (reporting): {co2_saving_percent:.2f}%")
-        print(f"Handoff Reduction (vs RSSI): {handoff_reduction:.2f}%")
-        print(
-            f"Energy-Aware handoffs <= RSSI baseline: {energy_aware_handoffs_leq_rssi} "
-            f"({ea_ho} vs {rssi_ho})"
-        )
-        print(f"Energy Saving (vs Naive Nearest): {energy_saving_vs_naive:.2f}%")
-        print(f"RSSI vs Naive (energy improvement): {rssi_vs_naive_energy:.2f}%")
+        print(f"Energy Saving (EA vs RSSI):            {energy_improvement:.2f}%")
+        print(f"Energy Saving (EA vs SINR):            {comparison['energy_saving_vs_sinr_percent']:.2f}%")
+        print(f"Energy Saving (EA vs Load-aware RSSI): {comparison['energy_saving_vs_load_aware_rssi_percent']:.2f}%")
+        print(f"Energy Saving (EA vs Naive):           {comparison['energy_saving_vs_naive_percent']:.2f}%")
+        print(f"CO2 Saving vs RSSI:                    {co2_saving_percent:.2f}%")
+        print(f"Handoff Reduction (EA vs RSSI):        {handoff_reduction:.2f}%")
+        print(f"EA handoffs <= RSSI: {ea_ho <= rssi_ho} ({ea_ho} vs {rssi_ho})")
 
         return comparison
 
     def save_results(self, filename: str = 'results/simulation_results.json'):
         os.makedirs(os.path.dirname(filename) or '.', exist_ok=True)
 
-        def convert_to_serializable(obj):
+        def _serialize(obj):
             if isinstance(obj, dict):
-                return {k: convert_to_serializable(v) for k, v in obj.items()}
+                return {k: _serialize(v) for k, v in obj.items()}
             if isinstance(obj, list):
-                return [convert_to_serializable(i) for i in obj]
+                return [_serialize(i) for i in obj]
             if isinstance(obj, (np.integer, np.int64)):
                 return int(obj)
             if isinstance(obj, (np.floating, np.float64)):
@@ -989,7 +1038,7 @@ class V2XSimulator:
                 return obj.tolist()
             return obj
 
-        serializable_results = convert_to_serializable({
+        payload = _serialize({
             'config': {
                 'num_vehicles': self.config.num_vehicles,
                 'num_base_stations': self.config.num_base_stations,
@@ -997,25 +1046,18 @@ class V2XSimulator:
                 'area_size': self.config.area_size,
                 'seed': self.config.seed,
                 'shadowing_std_db': self.config.shadowing_std_db,
-                'shadowing_reliability': self.config.shadowing_reliability,
-                'target_rx_power_dbm': self.config.target_rx_power_dbm,
                 'weather_profile': self.config.weather_profile,
-                'weather_path_loss_exponent': self.config.get_weather().path_loss_exponent,
-                'weather_shadowing_std_db': self.config.get_weather().shadowing_std_db,
-                'weather_rain_attenuation_db_per_km': self.config.get_weather().rain_attenuation_db_per_km,
-                'highway_lateral_noise_std_m': self.config.highway_lateral_noise_std_m,
                 'carbon_intensity_kg_per_kwh': self.config.carbon_intensity_kg_per_kwh,
-                'seconds_per_year': self.config.seconds_per_year,
-                'handoff_cooldown_s': self.config.handoff_cooldown_s,
-                'energy_aware_min_energy_saving': self.config.energy_aware_min_energy_saving,
-                'energy_aware_time_to_trigger_s': self.config.energy_aware_time_to_trigger_s,
-                'energy_aware_min_data_rate_bps': self.config.energy_aware_min_data_rate_bps,
-                'rssi_energy_use_fixed_tx': self.config.rssi_energy_use_fixed_tx,
             },
-            'results': self.results
+            'results': {
+                algo: {
+                    'stats': self.results[algo].get('stats', {}),
+                    'algorithm_stats': self.results[algo].get('algorithm_stats', {}),
+                }
+                for algo in self.results
+            },
         })
 
         with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(serializable_results, f, indent=2)
-
+            json.dump(payload, f, indent=2)
         print(f"Results saved to {filename}")

@@ -76,6 +76,8 @@ When you run \texttt{python main.py}, it:
 \item \textbf{Scalability} vs number of vehicles.
 \item \textbf{Energy-model sensitivity} (change power model parameters).
 \item \textbf{Scenario diversity} (clear / heavy rain / urban dense).
+\item Also reports \textbf{Bangladesh-grid CO\textsubscript{2} sensitivity} using \texttt{SimulationConfig.bangladesh\_grid\_scenario()}.
+\item Optional standalone weather study: \texttt{python weather\_sweep.py} (cross-weather uncertainty with 95\% CI).
 \item Optional: \textbf{Comprehensive validation} (\texttt{python main.py --comprehensive-validation} or \texttt{python validation\_runner.py}): literature EPB checks, multi-duration extrapolation stability, extended CO\textsubscript{2} example, literature index printout.
 \end{itemize}
 
@@ -150,6 +152,7 @@ So \texttt{main.py} is the “orchestrator” that:
 \item Configures a base scenario.
 \item Drives all algorithms and experiments.
 \item Summarizes results in console + \texttt{results/} folder.
+\item Prints regional CO\textsubscript{2} sensitivity snapshots (Bangladesh-intensity scenario) for manuscript discussion.
 \end{itemize}
 
 
@@ -734,6 +737,10 @@ Inside \texttt{run\_algorithm(algorithm\_name)}:
 \item Ping-pong rate,
 \item Handoff delay per vehicle,
 \item Service availability (avg, p5).
+\item Outage decomposition terms:
+\item \texttt{outage\_probability\_percent} (total outage),
+\item \texttt{coverage\_gap\_percent} (no serving BS / no coverage),
+\item \texttt{sinr\_outage\_percent} (connected but SINR below threshold).
 \end{itemize}
 
 \paragraph*{Paired t-tests}
@@ -865,6 +872,26 @@ Inside \texttt{run\_algorithm(algorithm\_name)}:
 \label{fig:scenario_diversity_energy_saving}
 \end{figure}
 
+\subsection{5. Multi-weather uncertainty sweep: \texttt{weather\_sweep.py}}
+\begin{itemize}
+\item Standalone script to evaluate robustness across all defined weather profiles in \texttt{src/models/weather.py}.
+\item Uses default multi-seed set \texttt{[42,123,456,789,1011]} and computes mean + 95\% confidence intervals (t-distribution) per weather.
+\item Core outputs:
+\item \texttt{weather\_sweep.json}
+\item \texttt{weather\_sweep\_energy\_saving.png}
+\item \texttt{weather\_sweep\_handoff\_reduction.png}
+\item \texttt{weather\_sweep\_co2\_saving.png}
+\item Supports CLI overrides for duration, time-step, number of vehicles, base stations, and weather subset for reproducible ablations.
+\end{itemize}
+
+\subsection{6. Recent codebase fixes reflected in current results}
+\begin{itemize}
+\item \textbf{State reset fairness}: \texttt{V2XSimulator.run\_algorithm()} uses explicit network-state reset so each algorithm starts from clean BS load state.
+\item \textbf{Outage decomposition}: total outage is split into \texttt{coverage\_gap\_percent} and \texttt{sinr\_outage\_percent}, reducing ambiguity in failure attribution.
+\item \textbf{Scaling scenario correction}: \texttt{run\_scaling\_experiment()} now uses \texttt{SimulationConfig.scaling\_scenario()} to avoid sparse-coverage collapse at high load.
+\item \textbf{Hardware-validation scope}: \texttt{EnergyModelValidator.validation\_passed} is based on in-scope OBU-side anchors; BS anchors are retained as contextual rows.
+\end{itemize}
+
 
 
 \section{Tests: what they guarantee (\texttt{tests/test_simulation.py})}
@@ -895,6 +922,8 @@ The tests assert:
 \item SINR and load-aware RSSI short runs produce valid stats.
 \item \textbf{Link metrics}:
 \item \texttt{\_make\_step\_link\_metrics\_getter} includes interference and SINR fields, which are non-negative and sensible.
+\item \textbf{Hardware validator compatibility fields}:
+\item Output preserves compatibility keys such as \texttt{mean\_absolute\_error}, \texttt{max\_deviation\_percent}, and \texttt{mean\_absolute\_error\_obu}.
 \end{itemize}
 
 These tests act like \textbf{unit + regression tests} to ensure that core modeling assumptions and metrics don’t silently break.
@@ -906,8 +935,11 @@ These tests act like \textbf{unit + regression tests} to ensure that core modeli
 \item \textbf{\texttt{src/utils/hardware\_validation.py}} --- \texttt{EnergyModelValidator}: compares representative model EPB to literature anchor rows; optional calibration factors for OBU/BS-style device types.
 \item \textbf{\texttt{simulations/validator.py}} --- \texttt{ExtrapolationValidator}: runs multiple simulation durations and checks stability of per-second energy, CO\textsubscript{2}, and handoff rates (coefficient of variation); can save \texttt{results/extrapolation\_validation.png}.
 \item \textbf{\texttt{simulations/config.py}} --- \texttt{extended\_validation\_scenario()}, \texttt{multi\_duration\_validation()}.
-\item \textbf{\texttt{docs/literature\_review.py}} --- structured \texttt{LITERATURE\_REFERENCES} ($\approx$19 keys), \texttt{generate\_related\_work\_section()}, aligned with BibTeX keys for the final paper.
+\item \textbf{\texttt{docs/literature\_review.py}} --- structured \texttt{LITERATURE\_REFERENCES} (currently $\sim$20+ keys; check \texttt{list\_all\_keys()}), \texttt{generate\_related\_work\_section()}, aligned with BibTeX keys for the final paper.
 \item \textbf{\texttt{validation\_runner.py}} --- orchestrates comprehensive validation and optional JSON export (\texttt{results/comprehensive\_validation.json}).
+\item \textbf{\texttt{weather\_sweep.py}} --- weather-robustness uncertainty study with 95\% CI plots and JSON summary.
+\item \textbf{\texttt{debug\_metrics.py}} --- quick sanity-check script for algorithm-selection differentiation in a minimal two-BS setup.
+\item \textbf{\texttt{requirements.txt}} --- reproducible Python dependency baseline for simulation, plotting, and tests.
 \end{itemize}
 
 
