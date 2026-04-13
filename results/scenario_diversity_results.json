@@ -2,69 +2,83 @@
   "seeds": [
     42,
     123,
-    456
+    456,
+    789,
+    1011
   ],
   "scenarios": [
     {
       "scenario_key": "clear_weather",
       "scenario_label": "Clear weather",
-      "energy_saving_percent_mean": 27.421940819656843,
-      "energy_saving_percent_std": 0.1880841570539114,
+      "energy_saving_percent_mean": 17.37956630834277,
+      "energy_saving_percent_std": 0.8029709371187917,
       "per_seed_energy_saving_percent": [
-        27.606318655560543,
-        27.163718515235217,
-        27.49578528817477
+        17.888869364246393,
+        17.542256929653217,
+        17.186343993809096,
+        15.959924740218515,
+        18.320436513786625
       ],
       "seeds": [
         42,
         123,
-        456
+        456,
+        789,
+        1011
       ],
       "overrides": {
         "weather_profile": "clear",
         "shadowing_std_db": 6.0,
         "num_base_stations": 9,
-        "area_size": 3000,
-        "bs_coverage_radius": 400
+        "area_size": 2800,
+        "bs_coverage_radius": 650
       }
     },
     {
       "scenario_key": "heavy_rain",
       "scenario_label": "Heavy rain",
-      "energy_saving_percent_mean": 59.38652360676457,
-      "energy_saving_percent_std": 0.31640565409962373,
+      "energy_saving_percent_mean": 48.764832952013684,
+      "energy_saving_percent_std": 0.24607728831136766,
       "per_seed_energy_saving_percent": [
-        59.10814480215875,
-        59.22231930811277,
-        59.82910671002218
+        48.86080469328686,
+        48.44574679898418,
+        48.875995815231974,
+        48.526598041427214,
+        49.11501941113821
       ],
       "seeds": [
         42,
         123,
-        456
+        456,
+        789,
+        1011
       ],
       "overrides": {
         "weather_profile": "heavy_rain",
         "shadowing_std_db": 15.0,
         "num_base_stations": 9,
-        "area_size": 3000,
-        "bs_coverage_radius": 400
+        "area_size": 2800,
+        "bs_coverage_radius": 650
       }
     },
     {
       "scenario_key": "urban_dense",
       "scenario_label": "Urban dense",
-      "energy_saving_percent_mean": 68.96672514345236,
-      "energy_saving_percent_std": 0.15383297178711317,
+      "energy_saving_percent_mean": 31.352739592596055,
+      "energy_saving_percent_std": 0.7654072201699094,
       "per_seed_energy_saving_percent": [
-        68.89838432909251,
-        68.82202681487124,
-        69.17976428639334
+        31.227738190797975,
+        30.5100569897432,
+        31.171112970050096,
+        31.058471418501977,
+        32.79631839388703
       ],
       "seeds": [
         42,
         123,
-        456
+        456,
+        789,
+        1011
       ],
       "overrides": {
         "weather_profile": "clear",

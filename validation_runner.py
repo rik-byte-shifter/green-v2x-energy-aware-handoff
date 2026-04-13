@@ -36,7 +36,7 @@ def run_comprehensive_validation(
     print("COMPREHENSIVE VALIDATION STUDY")
     print("=" * 70)
 
-    base = base_config or SimulationConfig.sparse_demonstration_scenario()
+    base = base_config or SimulationConfig.paper_baseline_scenario()
     if durations is None:
         durations = [d for d, _ in SimulationConfig.multi_duration_validation()]
 

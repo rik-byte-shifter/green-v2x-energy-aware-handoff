@@ -68,56 +68,56 @@
     "metrics": {
       "energy_per_second": {
         "values_by_duration": {
-          "300": 8.285666920246115,
-          "900": 8.319593839940415,
-          "1800": 8.27112605126316,
-          "3600": 8.290530055670734,
-          "7200": 8.314820229234927
+          "300": 50.22070178571434,
+          "900": 50.528097023809586,
+          "1800": 50.4820878968246,
+          "3600": 50.402253174604986,
+          "7200": 50.41254523809594
         },
-        "mean": 8.29634741927107,
-        "std": 0.01825197504254245,
-        "coefficient_of_variation_percent": 0.22000012921525045,
+        "mean": 50.40913702380989,
+        "std": 0.10491916291522584,
+        "coefficient_of_variation_percent": 0.20813520942774533,
         "stable": true
       },
       "co2_per_second": {
         "values_by_duration": {
-          "300": 1.1507870722564047e-06,
-          "900": 1.1554991444361687e-06,
-          "1800": 1.1487675071198832e-06,
-          "3600": 1.1514625077320465e-06,
-          "7200": 1.1548361429492956e-06
+          "300": 6.975097470238104e-06,
+          "900": 7.017791253306887e-06,
+          "1800": 7.011401096781195e-06,
+          "3600": 7.000312940917359e-06,
+          "7200": 7.001742394179991e-06
         },
-        "mean": 1.1522704748987596e-06,
-        "std": 2.534996533686497e-09,
-        "coefficient_of_variation_percent": 0.22000012921525444,
+        "mean": 7.001269031084707e-06,
+        "std": 1.4572105960447559e-08,
+        "coefficient_of_variation_percent": 0.20813520942773855,
         "stable": true
       },
       "handoffs_per_second": {
         "values_by_duration": {
-          "300": 0.37333333333333335,
-          "900": 0.3622222222222222,
-          "1800": 0.37222222222222223,
-          "3600": 0.3852777777777778,
-          "7200": 0.37041666666666667
+          "300": 3.0433333333333334,
+          "900": 3.0255555555555556,
+          "1800": 3.0344444444444445,
+          "3600": 3.0077777777777777,
+          "7200": 3.003888888888889
         },
-        "mean": 0.37269444444444444,
-        "std": 0.007400367024598537,
-        "coefficient_of_variation_percent": 1.9856392105951206,
+        "mean": 3.023,
+        "std": 0.01515190571887183,
+        "coefficient_of_variation_percent": 0.5012208309253003,
         "stable": true
       }
     },
     "linearity_analysis": {
       "energy_per_second": "Stable (CV=0.2%) - linear extrapolation reasonable for this metric",
       "co2_per_second": "Stable (CV=0.2%) - linear extrapolation reasonable for this metric",
-      "handoffs_per_second": "Stable (CV=2.0%) - linear extrapolation reasonable for this metric"
+      "handoffs_per_second": "Stable (CV=0.5%) - linear extrapolation reasonable for this metric"
     },
     "extrapolation_valid": true
   },
   "co2_example_breakdown": {
     "communication_direct_kg": 0.001388888888888889,
     "infrastructure_overhead_kg": 0.0006944444444444445,
-    "embodied_carbon_kg": 0.2053388090349076,
-    "total_kg": 0.2074221423682409,
+    "embodied_carbon_kg": 0.3650467716176135,
+    "total_kg": 0.36713010495094683,
     "scope_notes": [
       "Direct communication energy (TX chain, baseband proxy)",
       "BS infrastructure overhead (cooling + PSU losses; factor ~1.50 on energy)",

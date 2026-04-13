@@ -149,7 +149,7 @@ def run_weather_sweep(
         }
 
         for seed in seeds:
-            cfg = SimulationConfig.sparse_demonstration_scenario()
+            cfg = SimulationConfig.paper_baseline_scenario()
             cfg.weather_profile = wk  # weather key
             cfg.seed = seed
             # Allow overrides for faster experimentation.

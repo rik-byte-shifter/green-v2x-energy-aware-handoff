@@ -27,6 +27,9 @@ class EnergyAwareHandoff:
         min_time_since_last_handoff_s: float = 4.0,
         min_data_rate_bps: float = 5e6,
         packet_size: int = 1000,
+        sinr_handoff_trigger_db: float = 3.0,
+        max_acceptable_epb: float = 2.0e-7,
+        connectivity_penalty_factor: float = 2.0,
     ):
         # Minimum relative EPB improvement required (e.g. 0.25 => >25% vs current BS)
         self.hysteresis = hysteresis
@@ -36,6 +39,9 @@ class EnergyAwareHandoff:
         self.min_time_since_last_handoff_s = min_time_since_last_handoff_s
         self.min_data_rate_bps = min_data_rate_bps
         self.packet_size = packet_size
+        self.sinr_handoff_trigger_db = sinr_handoff_trigger_db
+        self.max_acceptable_epb = max_acceptable_epb
+        self.connectivity_penalty_factor = connectivity_penalty_factor
         self.energy_model = EnergyModel()
 
         self.total_handoffs = 0
@@ -115,6 +121,7 @@ class EnergyAwareHandoff:
             'energy_per_bit': epb,
             'metric': metric,
             'load': bs.get_load(),
+            'snr': snr,
         }
 
     def link_energy_per_bit(
@@ -180,23 +187,38 @@ class EnergyAwareHandoff:
         if not viable:
             return None, {}
 
+        # 🔽 HARD SINR + QoS FILTER
+        MIN_SINR_FOR_SELECTION = -2.0  # dB: below this, link is effectively dead
         qos_pool = [
             r for r in viable
             if r['data_rate'] >= self.min_data_rate_bps
+            and r.get('snr', -999) > MIN_SINR_FOR_SELECTION
         ]
-        # Prefer BS that meet min throughput; if none (outage / edge), fall back to best EPB
-        pool = qos_pool if qos_pool else viable
-        qos_satisfied = bool(qos_pool)
 
-        best = min(pool, key=lambda x: x['metric'])
+        # Fallback strategy: prefer QoS-compliant, but never pick a dead link
+        if qos_pool:
+            pool = qos_pool
+        else:
+            pool = [r for r in viable if r.get('snr', -999) > MIN_SINR_FOR_SELECTION]
+            if not pool:
+                pool = viable  # Absolute last resort: maintain connectivity
 
+        # 🔽 CELL-EDGE PENALTY
+        for r in pool:
+            distance_ratio = r['distance'] / r['bs'].config.coverage_radius
+            if distance_ratio > 0.75:  # Near cell edge → penalize metric
+                r['adjusted_metric'] = r['metric'] * self.connectivity_penalty_factor
+            else:
+                r['adjusted_metric'] = r['metric']
+
+        best = min(pool, key=lambda x: x['adjusted_metric'])
         return best['bs'], {
             'tx_power': best['tx_power'],
             'energy_per_bit': best['energy_per_bit'],
             'data_rate': best['data_rate'],
             'distance': best['distance'],
-            'metric': best['metric'],
-            'qos_met': qos_satisfied,
+            'metric': best['adjusted_metric'],
+            'qos_met': bool(qos_pool),
             'min_data_rate_bps': self.min_data_rate_bps,
         }
 
@@ -208,45 +230,65 @@ class EnergyAwareHandoff:
         current_epb: float,
         candidate_epb: float,
         current_time: Optional[float] = None,
+        current_sinr_db: Optional[float] = None,
+        candidate_sinr_db: Optional[float] = None,
     ) -> bool:
         vid = vehicle.vehicle_id
 
-        if (
-            current_bs.get_load() > 0.8
-            and candidate_bs.get_load() < 0.6
-        ):
-            self._clear_ttt(vid)
-            return True
-
-        if current_bs.get_load() > self.load_threshold:
-            self._clear_ttt(vid)
-            return True
-
-        if current_epb == 0 or np.isinf(current_epb):
-            self._clear_ttt(vid)
-            return True
-
-        time_since_last_handoff = (
+        # 0) Hard cooldown guard first.
+        # Prevents "forced" triggers from bypassing anti-ping-pong protection.
+        time_since_last = (
             float('inf')
             if current_time is None
-            else (current_time - vehicle.state.last_handoff_time)
+            else current_time - vehicle.state.last_handoff_time
         )
-        if time_since_last_handoff < self.min_time_since_last_handoff_s:
-            self._clear_ttt(vid)
+        if time_since_last < self.min_time_since_last_handoff_s:
             return False
 
-        if current_epb <= 0:
+        forced_handoff = False
+
+        # 1️⃣ Overload escape
+        if current_bs.get_load() > self.load_threshold:
+            forced_handoff = True
+
+        # 2️⃣ SINR degradation trigger.
+        # Only treat as emergency when the candidate is clearly better;
+        # otherwise this trigger can create oscillations near cell edges.
+        if (
+            not forced_handoff
+            and current_sinr_db is not None
+            and candidate_sinr_db is not None
+            and current_sinr_db < self.sinr_handoff_trigger_db
+            and candidate_sinr_db >= current_sinr_db + 1.0
+            and candidate_sinr_db > self.snr_outage_threshold_db + 1.0
+        ):
+            forced_handoff = True
+
+        # 3️⃣ Max EPB trigger (prevent energy waste on poor links)
+        if (
+            not forced_handoff
+            and current_epb > self.max_acceptable_epb
+            and candidate_epb < current_epb * 0.95
+        ):
+            forced_handoff = True
+
+        # 4️⃣ Validity checks
+        if current_epb <= 0 or np.isinf(current_epb):
             self._clear_ttt(vid)
-            return False
+            return candidate_epb > 0 and np.isfinite(candidate_epb)
 
-        energy_saving = (current_epb - candidate_epb) / current_epb
-        energy_wants = energy_saving > self.hysteresis
+        # 5️⃣ Energy hysteresis (unless an emergency path is active)
+        if not forced_handoff:
+            energy_saving = (current_epb - candidate_epb) / current_epb
+            if energy_saving < self.hysteresis:
+                return False
 
-        if not energy_wants:
-            self._clear_ttt(vid)
-            return False
+        # 6️⃣ 🔽 SINR QUALITY GUARD (don't switch to worse link)
+        if candidate_sinr_db is not None and current_sinr_db is not None:
+            if candidate_sinr_db < current_sinr_db - 2.0:
+                return False
 
-        # Time-to-Trigger: candidate must beat threshold and stay best for TTT
+        # 7️⃣ TTT logic (keep existing)
         if current_time is None or self.time_to_trigger_s <= 0.0:
             self._clear_ttt(vid)
             return True

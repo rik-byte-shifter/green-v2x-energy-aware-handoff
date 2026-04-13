@@ -178,19 +178,26 @@ class EnvironmentalMetrics:
         num_vehicles: int,
         simulation_duration_s: float,
         seconds_per_year: float,
+        duty_cycle_fraction: float = 1.0,
     ) -> float:
         """
         Extrapolate average per-vehicle CO2 to an annual figure (kg CO2 / vehicle / year).
 
-        Uses linear scaling: (total_co2/n) * (seconds_per_year / simulation_duration_s).
-        This assumes the simulated interval is representative of the same duty cycle
-        over the full year.
+        Uses scaled annualization:
+          (total_co2/n) * (seconds_per_year / simulation_duration_s) * duty_cycle_fraction
+        where duty_cycle_fraction captures the fraction of yearly time spent in
+        active V2X communication conditions represented by the simulation.
         """
-        if num_vehicles <= 0 or simulation_duration_s <= 0 or seconds_per_year <= 0:
+        if (
+            num_vehicles <= 0
+            or simulation_duration_s <= 0
+            or seconds_per_year <= 0
+            or duty_cycle_fraction < 0
+        ):
             return 0.0
         return self.avg_co2_kg_per_vehicle(total_co2_kg, num_vehicles) * (
             seconds_per_year / simulation_duration_s
-        )
+        ) * duty_cycle_fraction
 
 
 class ComprehensiveEnvironmentalMetrics:

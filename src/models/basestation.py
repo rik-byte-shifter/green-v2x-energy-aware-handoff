@@ -30,7 +30,7 @@ class BSConfig:
     #   get_load() = connected / max_capacity
     #   At 200 vehicles / 16 BSs: ~12.5/100 = 0.125 load
     #   load_penalty in load_aware_rssi = 6.0 * 0.125 = 0.75 dB  (meaningful)
-    #   In sparse demo (20 veh / 9 BSs): ~2.2/100 = 0.022 load   (small but nonzero)
+    #   Example paper baseline (20 veh / 16 BSs, balanced): ~1.25/100 load
     max_capacity: int = 100
 
     frequency: float = 2.4e9  # 2.4 GHz

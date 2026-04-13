@@ -1,122 +1,62 @@
 # Green V2X: Energy-Aware Handoff in Vehicular Networks
 
-This project simulates highway V2X uplink communication and compares five handoff policies:
-
-- `energy_aware`
-- `rssi`
-- `sinr`
-- `load_aware_rssi`
-- `naive_nearest`
-
-The simulator reports energy, EPB, throughput, handoff behavior, outage decomposition, and CO2 metrics, and includes validation tooling for literature anchors and duration extrapolation.
+Discrete-event style simulation of **highway V2X uplink** with multiple base-station handoff policies. The codebase compares algorithms on energy (including energy-per-bit), throughput, handoffs, outage decomposition, and grid-derived CO2, and ships plotting, multi-seed statistics, validation helpers, and optional sweeps.
 
 ---
 
-## What Is Included
+## Handoff algorithms
 
-- Multi-algorithm comparison with shared PHY/channel assumptions.
-- Highway mobility with lane-wise speed ranges and lane switching.
-- Weather-aware path-loss and rain attenuation (`clear`, `heavy_rain`, `urban_dense` profile effects).
-- Energy model with TX-chain components and optional calibration hook.
-- CO2 reporting:
-  - simple grid-intensity conversion
-  - extended scope breakdown (`co2_breakdown_comprehensive`) + scope statement text.
-- Robust experiment suite:
-  - multi-seed baseline
-  - scaling experiment (20/50/100/200 vehicles)
-  - energy-model sensitivity sweeps
-  - scenario diversity experiment
-  - comprehensive validation study (`--comprehensive-validation`)
-- Regression tests in `tests/test_simulation.py`.
+| Key | Module | Role |
+|-----|--------|------|
+| `energy_aware` | `src/algorithms/energy_aware_handoff.py` | Energy- and load-aware target selection |
+| `rssi` | `src/algorithms/rssi_handoff.py` | Strongest RSSI |
+| `sinr` | `src/algorithms/sinr_handoff.py` | SINR-based |
+| `load_aware_rssi` | `src/algorithms/load_aware_rssi_handoff.py` | RSSI with load bias |
+| `naive_nearest` | `src/algorithms/naive_nearest_handoff.py` | Geographic nearest BS |
 
 ---
 
-## Recent Fixes Integrated
+## What the simulator models
 
-The current codebase already includes these fixes:
-
-1. **Network state reset between algorithm runs** (`simulations/simulator.py`)
-   - `V2XSimulator.run_algorithm()` calls `_reset_network_state()` so each algorithm starts from clean BS load state.
-   - Prevents RSSI/SINR/load-aware baselines from inheriting stale `connected_vehicles` state.
-
-2. **Outage metrics are decomposed** (`simulations/simulator.py`)
-   - `outage_probability_percent` = total outage.
-   - `coverage_gap_percent` = no BS in coverage.
-   - `sinr_outage_percent` = connected but SINR below threshold.
-   - Console output and stats now expose this split directly.
-
-3. **Scaling experiment uses dense scenario** (`simulations/config.py`, `main.py`)
-   - `run_scaling_experiment()` now uses `SimulationConfig.scaling_scenario()`.
-   - Avoids the previous high-vehicle collapse to 0% savings from sparse-coverage gap dominance.
-
-4. **Hardware validation scope is explicit** (`src/utils/hardware_validation.py`)
-   - Anchors are tagged with `side` (`obu`/`bs`).
-   - `validation_passed` is determined only from OBU in-scope anchors.
-   - BS anchors are reported for context (`in_scope=False`) and do not fail validation.
-
-5. **Sparse baseline geometry corrected to avoid single-candidate behavior** (`simulations/config.py`)
-   - `sparse_demonstration_scenario()` now uses:
-     - `num_base_stations=16`
-     - `bs_coverage_radius=400`
-     - `shadowing_std_db=10.0`
-   - This creates overlapping coverage so RSSI/SINR/load-aware/EA are no longer forced into the same choice each step.
-
-6. **Base station capacity updated for scaling realism** (`src/models/basestation.py`)
-   - `BSConfig.max_capacity` default increased from `20` to `100`.
-   - Prevents high-load runs (especially 200-vehicle scaling) from artificial association blocking due to too-low toy capacity.
-
-Compatibility keys are also preserved in hardware validation output:
-- `mean_absolute_error`
-- `max_deviation_percent`
-- `mean_absolute_error_obu`
+- **Mobility**: Highway mode with multiple lanes, lane-dependent speeds, and stochastic lane changes (`movement_mode="highway"` in `SimulationConfig`).
+- **Radio**: Path loss, shadowing, TX power control, and **weather-dependent** extra loss via profiles in `src/models/weather.py` (`clear`, `light_rain`, `heavy_rain`, `snow`, `fog`, `thunderstorm`, `dust_sand_storm`).
+- **Network**: Base stations on a grid, association and capacity (`src/models/basestation.py`), uplink-oriented metrics in `simulations/simulator.py`.
+- **Energy / CO2**: TX-chain energy model (`src/models/energy.py`), optional calibration flag, grid **carbon intensity** (kg CO₂/kWh), extended CO2 breakdown fields for reporting (`co2_breakdown_comprehensive`, `co2_scope_statement`).
+- **Experiments** (via `main.py`): multi-seed baseline, paired t-tests (RSSI vs energy-aware), scaling across vehicle counts, energy-parameter sensitivity, scenario diversity, Bangladesh grid-intensity spot check, and plots under `results/`.
 
 ---
 
-## Project Layout
+## Repository layout
 
-- `main.py`
-  - Main experiment runner.
-  - Runs baseline multi-seed comparison + plotting + scaling + sensitivity + scenario diversity.
-  - Includes Bangladesh grid-intensity sensitivity printout.
-- `validation_runner.py`
-  - Runs comprehensive validation (hardware + extrapolation + CO2 scope + literature text).
-- `weather_sweep.py`
-  - Runs multi-weather robustness sweep with uncertainty across seeds.
-  - Saves weather-sweep JSON + 95% CI plots in `results/`.
-- `debug_metrics.py`
-  - Quick local sanity script to compare base-station selection behavior between Energy-Aware and RSSI in a minimal scenario.
-- `simulations/config.py`
-  - `SimulationConfig` and scenario factories:
-    - `sparse_demonstration_scenario()`
-    - `scaling_scenario()`
-    - `extended_validation_scenario()`
-    - `multi_duration_validation()`
-    - `sparse_demonstration_scenario_fixed_rssi_tx_sensitivity()`
-    - `bangladesh_grid_scenario()`
-- `simulations/simulator.py`
-  - `V2XSimulator` core simulation logic and per-algorithm metrics.
-- `simulations/validator.py`
-  - Extrapolation validation and duration stability analysis.
-- `src/models/`
-  - Vehicle, base station, weather, and energy models.
-- `src/algorithms/`
-  - Handoff policy implementations.
-- `src/utils/hardware_validation.py`
-  - Literature anchor comparison + validation scope handling.
-- `src/utils/visualization.py`
-  - Plot generation.
-- `docs/literature_review.py`
-  - Literature key index and related-work helper text.
-- `results/`
-  - Generated plots and JSON outputs.
-- `tests/`
-  - Regression tests.
+| Path | Purpose |
+|------|---------|
+| `main.py` | Full experiment suite: baseline, plots, scaling, sensitivity, scenario diversity |
+| `validation_runner.py` | Comprehensive validation (hardware EPB anchors, duration extrapolation, CO2 scope, literature helper text) |
+| `weather_sweep.py` | Multi-weather robustness with 95% CIs across seeds; JSON + bar plots |
+| `sweep_connectivity_energy.py` | Grid search over EA thresholds and PHY knobs → `results/parameter_sweep.json` (long runtime) |
+| `verify_fixes.py` | Fast sanity checks (~1 min): coverage geometry, BS capacity, algorithm differentiation |
+| `check_results.py` | Prints numeric stats from `results/simulation_results.json` (debugging) |
+| `debug_metrics.py` | Minimal scenario: compare energy-aware vs RSSI BS selection |
+| `simulations/config.py` | `SimulationConfig` and scenario factories (`paper_baseline_scenario`, `scaling_scenario`, `extended_validation_scenario`, `multi_duration_validation`, `bangladesh_grid_scenario`, etc.) |
+| `simulations/simulator.py` | `V2XSimulator`, per-algorithm runs, comparison metrics, state reset between algorithms |
+| `simulations/validator.py` | Extrapolation / duration stability analysis |
+| `src/models/` | `vehicle`, `basestation`, `channel`, `weather`, `energy` |
+| `src/algorithms/` | Handoff policies (table above) |
+| `src/utils/visualization.py` | Standard result plots written to `results/` |
+| `src/utils/metrics.py` | Metric helpers |
+| `src/utils/hardware_validation.py` | Literature anchor comparison; OBU-scoped pass/fail |
+| `docs/literature_review.py` | Literature key index and related-work text helpers |
+| `tests/test_simulation.py` | `pytest` regression suite |
+| `notebooks/analysis.ipynb` | Optional exploratory analysis |
+| `simulations/Untitled-1.ipynb` | Ad-hoc notebook (e.g. custom figures such as Pareto-style plots) |
+| `results/` | Generated JSON and PNGs (git may track examples; safe to regenerate) |
+| `LICENSE` | MIT |
 
 ---
 
 ## Setup
 
-From the project root:
+From the project root (Windows **PowerShell** example):
 
 ```powershell
 python -m venv venv
@@ -124,9 +64,11 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
+Dependencies include `numpy`, `scipy`, `matplotlib`, `pandas`, `plotly`, `seaborn`, `tqdm`, `jupyter`, and `pytest` (see `requirements.txt`).
+
 ---
 
-## How To Run
+## How to run
 
 ### 1) Full experiment suite
 
@@ -135,160 +77,111 @@ python main.py
 ```
 
 This runs:
-- multi-seed baseline comparison (`SEEDS = [42, 123, 456, 789, 1011]`)
-- statistical summary + paired t-tests (RSSI vs Energy-Aware)
-- plot generation in `results/`
-- scaling experiment
-- energy model sensitivity sweep
-- scenario diversity experiment
-- Bangladesh grid intensity sensitivity printout
 
-Runtime note:
-- `python main.py` is a full research suite (many nested multi-seed experiments) and typically takes about **2-3 hours** on a standard laptop CPU.
+- Multi-seed baseline comparison (`SEEDS` in `main.py`: `42, 123, 456, 789, 1011`)
+- Statistical summary and paired t-tests (total energy and average EPB: energy-aware vs RSSI)
+- Plots via `ResultVisualizer.generate_all_plots()` → `results/`
+- Scaling study (`scaling_scenario`, vehicle counts 20–200)
+- Energy model sensitivity (PA efficiency and TX circuit power grid)
+- Scenario diversity experiment
+- Short Bangladesh grid-intensity runs (`bangladesh_grid_scenario`, `0.62` kg CO₂/kWh)
 
-### 2) Comprehensive validation
+**Runtime**: Often on the order of **tens of minutes to a few hours** on a laptop CPU, depending on load.
+
+**CLI**:
 
 ```powershell
 python main.py --comprehensive-validation
 ```
 
-or:
+delegates to `validation_runner.run_comprehensive_validation()` (same as running `validation_runner.py` directly).
+
+### 2) Comprehensive validation
 
 ```powershell
 python validation_runner.py
 ```
 
-This includes:
-- hardware EPB validation against literature anchors
-- multi-duration extrapolation validation (`300, 900, 1800, 3600, 7200 s`)
-- comprehensive CO2 scope statement and breakdown example
-- generated extrapolation plot and validation JSON
+or:
 
-### 3) Multi-weather sweep (with uncertainty)
+```powershell
+python main.py --comprehensive-validation
+```
+
+Produces artifacts such as `results/comprehensive_validation.json` and `results/extrapolation_validation.png` (paths are set inside `validation_runner.py`).
+
+### 3) Weather sweep (uncertainty across seeds)
 
 ```powershell
 python weather_sweep.py
 ```
 
-Optional useful flags:
+Useful options:
 
 ```powershell
-python weather_sweep.py --seeds 42,123,456,789,1011 --duration 800 --num-vehicles 20 --num-base-stations 9 --area-size 3000
+python weather_sweep.py --seeds 42,123,456 --weathers clear,heavy_rain,fog --duration 800 --time-step 1.0 --num-vehicles 20 --num-base-stations 16 --area-size 2800 --results-dir results
 ```
 
-This includes:
-- weather-profile comparison across configured profiles in `src/models/weather.py`
-- mean and 95% confidence intervals across seeds (t-distribution)
-- JSON + bar plots for energy saving, handoff reduction, and CO2 saving
+- Starts from `SimulationConfig.paper_baseline_scenario()` then applies the CLI overrides for duration, vehicles, BS count, and area.
+- Default CLI uses `--num-base-stations 9` and `--area-size 3000` unless you override them; for parity with the **paper baseline** geometry, pass `--num-base-stations 16 --area-size 2800` (see below).
+- `--results-dir` controls where `weather_sweep.json` and the three bar plots are written (default `results`).
 
----
+### 4) Energy-aware hyperparameter / connectivity sweep
 
-## Key Output Metrics
+```powershell
+python sweep_connectivity_energy.py
+```
 
-Each algorithm produces a `stats` dictionary with fields including:
+Exhaustive Cartesian product over several parameters; writes `results/parameter_sweep.json`. Expect **long** runtimes.
 
-- Energy and traffic:
-  - `total_energy_joules`
-  - `total_bits`
-  - `avg_energy_per_bit`
-  - `avg_tx_power`
-  - `avg_throughput_bps`
-  - `p5_throughput_bps`
-- Handoff and stability:
-  - `total_handoffs`
-  - `ping_pong_handoffs`
-  - `ping_pong_rate_percent`
-  - `handoff_delay_total_s`
-  - `handoff_delay_per_vehicle_s`
-  - `avg_service_availability_percent`
-  - `p5_service_availability_percent`
-  - `reconnect_events`
-  - outage burst statistics
-- Outage decomposition:
-  - `outage_probability_percent`
-  - `coverage_gap_percent`
-  - `sinr_outage_percent`
-- CO2:
-  - `co2_kg`, `co2_grams`
-  - `avg_co2_kg_per_vehicle`
-  - `co2_kg_per_vehicle_per_year`
-  - `co2_breakdown_comprehensive`
-  - `co2_scope_statement`
+### 5) Quick verification (no full suite)
 
----
+```powershell
+python verify_fixes.py
+```
 
-## Main Result Artifacts
-
-Typical files written to `results/`:
-
-- Baseline outputs:
-  - `simulation_results.json`
-  - `bar_comparison.png`
-  - `bar_co2_comparison.png`
-  - `energy_comparison.png`
-  - `energy_per_vehicle_cdf.png`
-  - `cumulative_co2.png`
-  - `network_topology.png`
-  - `tx_power_distribution.png`
-  - `bs_load_distribution.png`
-  - `sinr_histogram.png`
-- Experiment outputs:
-  - `scaling_energy_saving_vs_vehicles.png`
-  - `scaling_results.json`
-  - `energy_model_sensitivity.png`
-  - `energy_model_sensitivity.json`
-  - `energy_model_justification.md`
-  - `scenario_diversity_energy_saving.png`
-  - `scenario_diversity_results.json`
-- Validation outputs:
-  - `extrapolation_validation.png`
-  - `comprehensive_validation.json`
-- Weather sweep outputs:
-  - `weather_sweep.json`
-  - `weather_sweep_energy_saving.png`
-  - `weather_sweep_handoff_reduction.png`
-  - `weather_sweep_co2_saving.png`
-
----
-
-## Running Tests
-
-Run full tests:
+### 6) Tests
 
 ```powershell
 python -m pytest tests/ -v
 ```
 
-Run a single test module:
+---
 
-```powershell
-python -m pytest tests/test_simulation.py -v
-```
+## Key output metrics
 
-Current suite covers:
-- environmental metrics
-- weather/path-loss behavior
-- QoS and algorithm behavior
-- simulator short runs and stats keys
-- comprehensive CO2 breakdown consistency
-- hardware validator output compatibility
+Each algorithm’s `stats` include energy and traffic (`total_energy_joules`, `avg_energy_per_bit`, `avg_throughput_bps`, `p5_throughput_bps`, …), handoff behavior (`total_handoffs`, `ping_pong_rate_percent`, `handoff_delay_*`, …), service quality (`avg_service_availability_percent`, …), **outage decomposition** (`outage_probability_percent`, `coverage_gap_percent`, `sinr_outage_percent`), and CO2 fields (`co2_kg`, `co2_breakdown_comprehensive`, `co2_scope_statement`, …).
+
+`run_comparison()` also reports relative improvements vs RSSI, SINR, load-aware RSSI, and naive nearest (energy, CO2, handoffs, etc.).
 
 ---
 
-## Reproducibility Notes
+## Typical artifacts under `results/`
 
-- Use fixed seeds for comparable runs (`SEEDS`, `SCALING_SEEDS`, `SENSITIVITY_SEEDS`, `SCENARIO_SEEDS` in `main.py`).
-- The baseline scenario in `main.py` is `SimulationConfig.sparse_demonstration_scenario()`.
-- Current sparse baseline settings are intentionally overlapping (`16` BS, `400 m` radius) to preserve algorithm differentiation.
-- The scaling study intentionally switches to `SimulationConfig.scaling_scenario()` for better connectivity at high load.
-- Base station default capacity is `BSConfig.max_capacity=100` for realistic high-vehicle scaling behavior.
-- Bangladesh-specific CO2 sensitivity uses `SimulationConfig.bangladesh_grid_scenario()` (`0.62 kg CO2/kWh`).
+| Group | Files |
+|-------|--------|
+| Baseline (from `main.py` + visualizer) | `simulation_results.json`, `bar_comparison.png`, `bar_co2_comparison.png`, `energy_comparison.png`, `energy_per_vehicle_cdf.png`, `cumulative_co2.png`, `network_topology.png`, `tx_power_distribution.png`, `bs_load_distribution.png`, `sinr_histogram.png` |
+| Scaling / sensitivity / diversity | `scaling_energy_saving_vs_vehicles.png`, `scaling_results.json`, `energy_model_sensitivity.png`, `energy_model_sensitivity.json`, `energy_model_justification.md`, `scenario_diversity_energy_saving.png`, `scenario_diversity_results.json` |
+| Validation | `extrapolation_validation.png`, `comprehensive_validation.json` |
+| Weather sweep | `weather_sweep.json`, `weather_sweep_energy_saving.png`, `weather_sweep_handoff_reduction.png`, `weather_sweep_co2_saving.png` |
+| Optional sweep | `parameter_sweep.json` (from `sweep_connectivity_energy.py`) |
+
+Custom figures (e.g. Pareto-style plots) may be produced from notebooks rather than `main.py`.
 
 ---
 
-## Paper/Reporting Scope Notes
+## Reproducibility and design notes
 
-- Hardware validation in this project is **literature-scale sanity checking**, not measured testbed calibration.
-- `validation_passed` is based on OBU-side anchors because the simulator models vehicular uplink energy.
-- Annualized CO2 is a linear extrapolation from simulated duration via `seconds_per_year`.
-- Extended CO2 scope fields are configurable and should be reported with clear in-scope/out-of-scope statements.
+- **Seeds** are centralized in `main.py` (`SEEDS`, `SCALING_SEEDS`, `SENSITIVITY_SEEDS`, `SCENARIO_SEEDS`).
+- **Primary baseline** for `main.py` is `SimulationConfig.paper_baseline_scenario()`:
+  - `num_base_stations=16` (4×4 grid), `area_size=2800`, `bs_coverage_radius=450`, `weather_profile="clear"`, `shadowing_std_db=10.0`, with overlapping coverage so RSSI / SINR / load-aware / energy-aware policies can diverge meaningfully.
+- **Scaling experiment** uses `SimulationConfig.scaling_scenario()` (e.g. larger coverage radius) so high vehicle counts are not dominated by coverage gaps.
+- **BS capacity**: default `BSConfig.max_capacity=100` avoids toy capacity blocking at 200 vehicles.
+- **Simulator**: `V2XSimulator.run_algorithm()` resets network state between algorithms so BS load is not carried across runs.
+- **Hardware validation** is literature-scale EPB sanity checking, not bench calibration; `validation_passed` follows **OBU-side** anchors in `hardware_validation.py`.
+
+---
+
+## License
+
+This project is licensed under the MIT License; see `LICENSE`.

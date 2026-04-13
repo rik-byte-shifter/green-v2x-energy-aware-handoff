@@ -21,13 +21,17 @@ from src.models.energy import EnergyParams
 from src.utils.visualization import ResultVisualizer
 
 # Multiple seeds for mean ± std (journal-style reporting)
-SEEDS = [42, 123, 456, 789, 1011]
+SEEDS = [
+    42, 123, 456, 789, 1011,
+    2024, 3141, 5000, 7777, 9999,
+    1234, 8888, 34115, 27182, 11235,
+]
 SCALING_VEHICLE_COUNTS = [20, 50, 100, 200]
-SCALING_SEEDS = [42, 123, 456]
-SENSITIVITY_SEEDS = [42, 123]
+SCALING_SEEDS = [42, 123, 456, 789, 1011, 2024, 3141]
+SENSITIVITY_SEEDS = [42, 123, 456, 789, 1011]
 PA_EFFICIENCY_VALUES = [0.25, 0.35, 0.45]
 TX_CIRCUIT_POWER_VALUES_W = [0.05, 0.10, 0.15]
-SCENARIO_SEEDS = [42, 123, 456]
+SCENARIO_SEEDS = [42, 123, 456, 789, 1011]
 
 
 def run_scaling_experiment(root: str, base_config: SimulationConfig):
@@ -36,14 +40,14 @@ def run_scaling_experiment(root: str, base_config: SimulationConfig):
     as number of vehicles grows from 20 to 200.
 
     FIX #3: uses scaling_scenario() (denser coverage) rather than the
-    sparse demo scenario so coverage gaps don't mask algorithm differences
+    paper baseline scenario so coverage gaps don't mask algorithm differences
     at high vehicle counts.
     """
     print("\n" + "=" * 70)
     print("SCALABILITY EXPERIMENT")
     print("=" * 70)
 
-    # Use the denser scaling scenario as the base, not the sparse demo
+    # Use the denser scaling scenario as the base, not the paper baseline
     scaling_base = SimulationConfig.scaling_scenario()
     print(
         f"  Base scenario: scaling_scenario() "
@@ -75,7 +79,7 @@ def run_scaling_experiment(root: str, base_config: SimulationConfig):
                 "per_seed_energy_saving_percent": [float(x) for x in per_seed],
             }
         )
-        print(f"  → Mean saving @ {n_veh} vehicles: {mean:.2f}% ± {std:.2f}%")
+        print(f"  -> Mean saving @ {n_veh} vehicles: {mean:.2f}% +/- {std:.2f}%")
 
     # ---- Plot ----
     x = np.asarray([r["num_vehicles"] for r in rows], dtype=float)
@@ -396,9 +400,9 @@ def main():
     root = os.path.dirname(os.path.abspath(__file__))
     os.chdir(root)
 
-    # Sparse / high-fading demonstration: PHY-fair baselines for primary plots.
-    # A fixed-TX variant exists as a sensitivity experiment.
-    config = SimulationConfig.sparse_demonstration_scenario()
+    # Paper baseline: PHY-fair baselines for primary plots.
+    # A fixed-TX variant exists as a sensitivity experiment (see config).
+    config = SimulationConfig.paper_baseline_scenario()
 
     print(f"\nSimulation Configuration:")
     print(f"  Vehicles: {config.num_vehicles}")
@@ -422,7 +426,8 @@ def main():
     print(f"  Grid carbon intensity: {config.carbon_intensity_kg_per_kwh} kg CO2/kWh")
     print(
         f"  CO2 annualization: {config.seconds_per_year:.0f} s/year "
-        f"(linear extrapolation from sim duration)"
+        f"with duty cycle {config.v2x_duty_cycle_fraction:.2f} "
+        f"(scaled extrapolation from sim duration)"
     )
     print(
         f"  RSSI energy model: "
@@ -520,7 +525,7 @@ def main():
     max_epb_saving = max(r["energy_saving_percent"] for r in results_list)
     _tag = "OK" if max_epb_saving > 15.0 else "NOT MET"
     print(
-        f"\n  Sparse-scenario check (target >15% EPB vs RSSI at least one seed): "
+        f"\n  Paper-baseline check (target >15% EPB vs RSSI at least one seed): "
         f"max seed saving = {max_epb_saving:.2f}% ({_tag})"
     )
 
@@ -550,6 +555,37 @@ def main():
         print("  Handoff constraint (EA <= RSSI): all seeds pass")
     else:
         print(f"  Handoff constraint (EA <= RSSI): {sum(leq_flags)}/{len(leq_flags)} seeds pass")
+
+    results_dir = os.path.join(root, "results")
+    os.makedirs(results_dir, exist_ok=True)
+    multiseed_summary = {
+        "seeds": [int(s) for s in SEEDS],
+        "energy_saving_vs_rssi_epb_mean": float(es_mean),
+        "energy_saving_vs_rssi_epb_std": float(es_std),
+        "energy_saving_vs_rssi_total_j_mean": float(es_tot_mean),
+        "energy_saving_vs_rssi_total_j_std": float(es_tot_std),
+        "handoff_reduction_mean": float(ho_mean),
+        "handoff_reduction_std": float(ho_std),
+        "ttest_total_energy": {"t": float(t_j), "p": float(p_j)},
+        "ttest_avg_epb": {"t": float(t_e), "p": float(p_e)},
+        "per_seed_ea_total_energy_j": [float(x) for x in ea_e],
+        "per_seed_rssi_total_energy_j": [float(x) for x in rssi_e],
+        "per_seed_ea_avg_epb_j_per_bit": [float(x) for x in ea_epb],
+        "per_seed_rssi_avg_epb_j_per_bit": [float(x) for x in rssi_epb],
+        "per_seed_energy_saving_vs_rssi_epb_percent": [
+            float(r["energy_saving_percent"]) for r in results_list
+        ],
+        "per_seed_energy_saving_vs_rssi_total_j_percent": [
+            float(r["energy_saving_total_joules_percent"]) for r in results_list
+        ],
+        "per_seed_handoff_reduction_percent": [
+            float(r["handoff_reduction_percent"]) for r in results_list
+        ],
+    }
+    multiseed_summary_path = os.path.join(results_dir, "multiseed_summary.json")
+    with open(multiseed_summary_path, "w", encoding="utf-8") as f:
+        json.dump(multiseed_summary, f, indent=2)
+    print(f"Multi-seed summary saved to {multiseed_summary_path}")
 
     results_path = os.path.join(root, "results", "simulation_results.json")
     last_simulator.save_results(results_path)
@@ -726,7 +762,8 @@ def main():
 
     print("\n" + "=" * 70)
     print("Simulation completed successfully!")
-    print("Plots and JSON reflect the last seed; multi-seed stats printed above.")
+    print("Plots and simulation_results.json reflect the last seed.")
+    print("Multi-seed reproducibility stats saved to results/multiseed_summary.json.")
     print("Check 'results/' folder for plots and data")
     print("=" * 70)
 

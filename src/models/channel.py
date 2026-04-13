@@ -78,11 +78,16 @@ class ChannelModel:
 
     def add_fading(self, signal_power: float) -> float:
         if self.fading_type == 'rayleigh':
-            fading = np.random.rayleigh()
+            # Normalized Rayleigh amplitude: E[|h|^2] = 1
+            fading = np.random.rayleigh(scale=1.0 / np.sqrt(2.0))
         elif self.fading_type == 'rician':
-            k_factor = 10
-            fading = np.sqrt(np.random.normal(np.sqrt(k_factor), 1) ** 2 +
-                           np.random.normal(0, 1) ** 2)
+            # Normalized Rician amplitude with K-factor (linear).
+            k_factor = 10.0
+            los_mean = np.sqrt(k_factor / (k_factor + 1.0))
+            scatter_std = np.sqrt(1.0 / (2.0 * (k_factor + 1.0)))
+            i = np.random.normal(los_mean, scatter_std)
+            q = np.random.normal(0.0, scatter_std)
+            fading = np.sqrt(i ** 2 + q ** 2)
         else:
             fading = 1.0
 

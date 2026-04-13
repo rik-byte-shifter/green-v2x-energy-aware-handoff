@@ -31,6 +31,7 @@ class SimulationConfig:
     time_step: float = 1.0
 
     tx_power_default: float = 0.1
+    tx_power_max_watts: float = 0.5
     data_rate: float = 1e6
     packet_size: int = 1000
 
@@ -49,7 +50,7 @@ class SimulationConfig:
 
     shadowing_std_db: float = 8.0
     shadowing_reliability: float = 0.95
-    target_rx_power_dbm: float = -90.0
+    target_rx_power_dbm: float = -103.0
 
     weather_profile: WeatherType = "clear"
 
@@ -58,6 +59,8 @@ class SimulationConfig:
     # Grid carbon intensity (kg CO2 per kWh).
     # Default 0.5 = global average.  Bangladesh grid ~= 0.62 kg/kWh.
     carbon_intensity_kg_per_kwh: float = 0.5
+    # Fraction of annual time a vehicle is in active V2X communication context.
+    v2x_duty_cycle_fraction: float = 0.15
 
     use_energy_calibration: bool = True
 
@@ -117,6 +120,7 @@ class SimulationConfig:
             self.weather_profile = "clear"
         assert self.highway_lateral_noise_std_m >= 0.0
         assert self.carbon_intensity_kg_per_kwh >= 0.0
+        assert 0.0 < self.v2x_duty_cycle_fraction <= 1.0
         assert self.seconds_per_year > 0.0
         assert 0.0 < self.energy_aware_min_energy_saving < 1.0
         assert self.energy_aware_time_to_trigger_s >= 0.0
@@ -128,9 +132,10 @@ class SimulationConfig:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def sparse_demonstration_scenario() -> "SimulationConfig":
+    def paper_baseline_scenario() -> "SimulationConfig":
         """
-        Main paper baseline comparison scenario.
+        Primary evaluation scenario for the paper: highway V2X uplink with
+        overlapping BS coverage so handoff policies can diverge meaningfully.
 
         FIX -- overlapping coverage so baselines differentiate.
         -------------------------------------------------------
@@ -167,28 +172,31 @@ class SimulationConfig:
           shadowing_std_db  : 15.0 -> 10.0  (less extreme -> more connected steps)
           handoff_cooldown_s: 8.0 -> 5.0
           energy_aware_min_energy_saving: 0.32 -> 0.20
-        Heavy-rain weather profile is retained to preserve adverse-condition
-        framing for the IEES paper.
+
+        The returned config uses ``weather_profile="clear"``; sweeps and
+        scenario-diversity experiments vary weather separately.
         """
         return SimulationConfig(
             num_vehicles=20,
             num_base_stations=16,
-            area_size=3000,
-            bs_coverage_radius=400,
-            duration=800,
+            area_size=2800,
+            bs_coverage_radius=650,
+            duration=1200,
             movement_mode="highway",
             highway_num_lanes=4,
-            shadowing_std_db=10.0,
+            shadowing_std_db=6.0,
             highway_lateral_noise_std_m=0.5,
-            handoff_cooldown_s=5.0,
+            handoff_cooldown_s=8.0,
             energy_aware_min_energy_saving=0.20,
-            energy_aware_time_to_trigger_s=3.0,
+            energy_aware_time_to_trigger_s=4.0,
             energy_aware_min_data_rate_bps=1e6,
+            snr_outage_threshold_db=-11.0,
             rssi_energy_use_fixed_tx=False,
             tx_power_default=0.12,
+            tx_power_max_watts=0.5,
             shadowing_reliability=0.95,
-            target_rx_power_dbm=-90.0,
-            weather_profile="heavy_rain",
+            target_rx_power_dbm=-103.0,
+            weather_profile="clear",
         )
 
     @staticmethod
@@ -217,7 +225,7 @@ class SimulationConfig:
             rssi_energy_use_fixed_tx=False,
             tx_power_default=0.1,
             shadowing_reliability=0.95,
-            target_rx_power_dbm=-90.0,
+            target_rx_power_dbm=-103.0,
             weather_profile="clear",
         )
 
@@ -225,26 +233,27 @@ class SimulationConfig:
     def extended_validation_scenario() -> "SimulationConfig":
         """
         Longer run (1 h) for extrapolation / stability experiments.
-        Same overlapping coverage as sparse_demonstration_scenario.
+        Same overlapping-coverage intent as paper_baseline_scenario.
         """
         return SimulationConfig(
             num_vehicles=20,
             num_base_stations=16,
             area_size=3000,
-            bs_coverage_radius=400,
+            bs_coverage_radius=450,
             duration=3600,
             movement_mode="highway",
             highway_num_lanes=4,
             shadowing_std_db=10.0,
             highway_lateral_noise_std_m=0.5,
-            handoff_cooldown_s=5.0,
-            energy_aware_min_energy_saving=0.20,
+            handoff_cooldown_s=4.0,
+            energy_aware_min_energy_saving=0.15,
             energy_aware_time_to_trigger_s=3.0,
             energy_aware_min_data_rate_bps=1e6,
             rssi_energy_use_fixed_tx=False,
             tx_power_default=0.12,
+            tx_power_max_watts=0.25,
             shadowing_reliability=0.95,
-            target_rx_power_dbm=-90.0,
+            target_rx_power_dbm=-103.0,
             weather_profile="heavy_rain",
             seed=42,
         )
@@ -261,9 +270,9 @@ class SimulationConfig:
         ]
 
     @staticmethod
-    def sparse_demonstration_scenario_fixed_rssi_tx_sensitivity() -> "SimulationConfig":
+    def paper_baseline_scenario_fixed_rssi_tx_sensitivity() -> "SimulationConfig":
         """Sensitivity experiment: enable rssi_energy_use_fixed_tx."""
-        cfg = SimulationConfig.sparse_demonstration_scenario()
+        cfg = SimulationConfig.paper_baseline_scenario()
         cfg.rssi_energy_use_fixed_tx = True
         return cfg
 
@@ -272,9 +281,9 @@ class SimulationConfig:
         """
         Bangladesh grid intensity sensitivity run.
         Uses 0.62 kg CO2/kWh per Bangladesh Power Development Board reporting.
-        All other parameters match sparse_demonstration_scenario.
+        All other parameters match paper_baseline_scenario.
         """
-        cfg = SimulationConfig.sparse_demonstration_scenario()
+        cfg = SimulationConfig.paper_baseline_scenario()
         cfg.carbon_intensity_kg_per_kwh = 0.62
         return cfg
 

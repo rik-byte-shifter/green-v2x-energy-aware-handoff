@@ -17,6 +17,7 @@ from src.models.energy import (
     EnergyModel,
     EnvironmentalMetrics,
 )
+from src.models.channel import ChannelModel
 from src.algorithms.energy_aware_handoff import EnergyAwareHandoff
 from src.algorithms.rssi_handoff import RSSIHandoff
 from src.algorithms.sinr_handoff import SINRHandoff
@@ -45,7 +46,7 @@ class V2XSimulator:
        but not forced to sum to 100 (coverage gaps create a third state).
        A ``coverage_gap_percent`` field is added to make this transparent.
 
-    3. Scalability collapse at 200 vehicles: the sparse_demonstration_scenario
+    3. Scalability collapse at 200 vehicles: the paper_baseline_scenario
        uses area_size=3000 and bs_coverage_radius=250 — at high vehicle counts
        every vehicle eventually hits a coverage gap and energy_aware picks
        the same BS as RSSI (both pick best available), giving 0% saving.
@@ -56,6 +57,7 @@ class V2XSimulator:
     def __init__(self, config: SimulationConfig = None):
         self.config = config or SimulationConfig()
         np.random.seed(self.config.seed)
+        weather = self.config.get_weather()
 
         self.base_stations: List[BaseStation] = []
         self.vehicles: List[Vehicle] = []
@@ -69,6 +71,11 @@ class V2XSimulator:
             carbon_intensity_kg_per_kwh=self.config.carbon_intensity_kg_per_kwh,
             include_infrastructure=self.config.comprehensive_co2_include_infrastructure,
             include_embodied_carbon=self.config.comprehensive_co2_include_embodied,
+        )
+        self.channel_model = ChannelModel(
+            path_loss_exponent=weather.path_loss_exponent,
+            shadowing_std=weather.shadowing_std_db,
+            fading_type='rayleigh',
         )
 
         self.energy_aware_algo = EnergyAwareHandoff(
@@ -126,6 +133,7 @@ class V2XSimulator:
                     rain_attenuation_db_per_km=weather.rain_attenuation_db_per_km,
                     target_rx_power_dbm=self.config.target_rx_power_dbm,
                     shadowing_reliability=self.config.shadowing_reliability,
+                    tx_power_max_watts=self.config.tx_power_max_watts,
                 )
                 bs = BaseStation(bs_id=bs_id, x=x, y=y, config=bs_config)
                 self.base_stations.append(bs)
@@ -249,6 +257,7 @@ class V2XSimulator:
         computations within that step.
         """
         shadowing_cache_db: Dict[Tuple[int, int], float] = {}
+        fading_cache_linear: Dict[Tuple[int, int], float] = {}
         channel_cache: Dict[Tuple[int, int], Dict[str, float]] = {}
         noise_dbm = -174.0 + 10.0 * np.log10(20e6)
         noise_mw = 10.0 ** (noise_dbm / 10.0)
@@ -276,9 +285,13 @@ class V2XSimulator:
                     shadowing_cache_db[key] = (
                         float(np.random.normal(0.0, std_db)) if std_db > 0.0 else 0.0
                     )
+                if key not in fading_cache_linear:
+                    fading_cache_linear[key] = float(self.channel_model.add_fading(1.0))
 
-                rx_power = mean_rx_dbm + shadowing_cache_db[key]
-                signal_mw = 10.0 ** (rx_power / 10.0)
+                rx_power_no_fading = mean_rx_dbm + shadowing_cache_db[key]
+                signal_mw = 10.0 ** (rx_power_no_fading / 10.0)
+                signal_mw *= fading_cache_linear[key]
+                rx_power = 10.0 * np.log10(max(signal_mw, 1e-30))
                 interference_mw = 0.0
                 for other_bs in self.base_stations:
                     if other_bs.bs_id == bs.bs_id:
@@ -289,12 +302,22 @@ class V2XSimulator:
                         shadowing_cache_db[other_key] = (
                             float(np.random.normal(0.0, std_db)) if std_db > 0.0 else 0.0
                         )
+                    if other_key not in fading_cache_linear:
+                        fading_cache_linear[other_key] = float(self.channel_model.add_fading(1.0))
                     d_other = other_bs.distance_to(vehicle.x, vehicle.y)
-                    tx_other = other_bs.calculate_tx_power_required_for_target_rx(d_other)
+                    # FIX: other_bs should transmit at a typical power, not the power required to reach THIS vehicle!
+                    # If other_bs has connected vehicles, assume it transmits at default power.
+                    # If not, it transmits at minimum power (beacon).
+                    if other_bs.connected_vehicles:
+                        tx_other = self.config.tx_power_default
+                    else:
+                        tx_other = other_bs.config.tx_power_min_watts
                     tx_other_dbm = 10.0 * np.log10(tx_other * 1000.0)
                     pl_other_db = other_bs.calculate_path_loss(d_other)
                     rx_other_dbm = tx_other_dbm - pl_other_db + shadowing_cache_db[other_key]
-                    interference_mw += 10.0 ** (rx_other_dbm / 10.0)
+                    interference_mw += (
+                        10.0 ** (rx_other_dbm / 10.0)
+                    ) * fading_cache_linear[other_key]
 
                 sinr_linear = signal_mw / max(1e-30, interference_mw + noise_mw)
                 snr = 10.0 * np.log10(max(sinr_linear, 1e-30))
@@ -553,6 +576,12 @@ class V2XSimulator:
                     )
                     if current_epb is None:
                         current_epb = float('inf')
+                        
+                    current_row = get_link_metrics(vehicle, current_bs, False)
+                    candidate_row = get_link_metrics(vehicle, candidate_bs, False)
+                    current_sinr_db = current_row['snr'] if current_row else -999.0
+                    candidate_sinr_db = candidate_row['snr'] if candidate_row else -999.0
+                    
                     should_ho = algo.should_handoff(
                         vehicle,
                         current_bs,
@@ -560,6 +589,8 @@ class V2XSimulator:
                         current_epb,
                         candidate_epb,
                         current_time=current_time,
+                        current_sinr_db=current_sinr_db,
+                        candidate_sinr_db=candidate_sinr_db,
                     )
                 elif algorithm_name == 'naive_nearest':
                     should_ho = algo.should_handoff(vehicle, current_bs, candidate_bs)
@@ -802,7 +833,11 @@ class V2XSimulator:
             co2_kg, self.config.num_vehicles
         )
         co2_v_yr = self.environmental.co2_kg_per_vehicle_per_year(
-            co2_kg, self.config.num_vehicles, dur_s, sy
+            co2_kg,
+            self.config.num_vehicles,
+            dur_s,
+            sy,
+            duty_cycle_fraction=self.config.v2x_duty_cycle_fraction,
         )
         co2_breakdown = self._comprehensive_env.calculate_total_co2(
             communication_energy_j=total_energy,
@@ -853,6 +888,7 @@ class V2XSimulator:
             'carbon_intensity_kg_per_kwh': self.environmental.carbon_intensity,
             'avg_co2_kg_per_vehicle': co2_avg_v,
             'co2_kg_per_vehicle_per_year': co2_v_yr,
+            'v2x_duty_cycle_fraction': float(self.config.v2x_duty_cycle_fraction),
             'co2_breakdown_comprehensive': co2_breakdown,
             'co2_scope_statement': self._comprehensive_env.get_scope_statement(),
             'simulation_duration_s': dur_s,
@@ -1047,7 +1083,11 @@ class V2XSimulator:
                 'seed': self.config.seed,
                 'shadowing_std_db': self.config.shadowing_std_db,
                 'weather_profile': self.config.weather_profile,
+                'tx_power_max_watts': self.config.tx_power_max_watts,
+                'target_rx_power_dbm': self.config.target_rx_power_dbm,
+                'shadowing_reliability': self.config.shadowing_reliability,
                 'carbon_intensity_kg_per_kwh': self.config.carbon_intensity_kg_per_kwh,
+                'v2x_duty_cycle_fraction': self.config.v2x_duty_cycle_fraction,
             },
             'results': {
                 algo: {

@@ -24,7 +24,7 @@ print("=" * 65)
 
 # ── CHECK 1: overlapping coverage geometry ─────────────────────────
 print("\n[1] Coverage geometry check")
-cfg = SimulationConfig.sparse_demonstration_scenario()
+cfg = SimulationConfig.paper_baseline_scenario()
 import math
 grid_size = int(math.sqrt(cfg.num_base_stations))
 spacing = cfg.area_size // (grid_size + 1)
@@ -56,7 +56,7 @@ else:
 # ── CHECK 3: run a short comparison and verify baselines differ ────
 print("\n[3] Algorithm differentiation check (short run, 30 steps)")
 short_cfg = replace(
-    SimulationConfig.sparse_demonstration_scenario(),
+    SimulationConfig.paper_baseline_scenario(),
     duration=30,
     seed=42,
 )

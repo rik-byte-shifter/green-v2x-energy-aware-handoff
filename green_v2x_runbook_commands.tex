@@ -1,0 +1,268 @@
+% Green V2X — Runbook (styled for clarity + a bit of flair)
+% Requires: tcolorbox, tikz, titlesec, fontawesome5, geometry (TeX Live / MiKTeX)
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{geometry}
+\geometry{margin=22mm, top=18mm, bottom=24mm}
+\usepackage{parskip}
+\setlength{\parskip}{0.55em plus 0.15em minus 0.08em}
+
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{calc}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+
+\usepackage{hyperref}
+\usepackage{xurl}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fontawesome5}
+\usepackage{amsmath}
+
+% --- Palette: deep teal + slate (sustainable / tech) ---
+\definecolor{gv2xTeal}{HTML}{0F766E}
+\definecolor{gv2xTealLight}{HTML}{14B8A6}
+\definecolor{gv2xInk}{HTML}{0F172A}
+\definecolor{gv2xMuted}{HTML}{64748B}
+\definecolor{gv2xCodeBg}{HTML}{F1F5F9}
+\definecolor{gv2xCodeFrame}{HTML}{CBD5E1}
+\definecolor{gv2xAccentBar}{HTML}{0D9488}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=gv2xTeal,
+  urlcolor=gv2xTealLight,
+  citecolor=gv2xInk,
+  pdftitle={Green V2X Runbook},
+  pdfauthor={Ranesh Das Rik},
+}
+
+\setlist[itemize]{leftmargin=*, topsep=4pt, itemsep=2pt, parsep=0pt}
+\setlist[enumerate]{leftmargin=*, topsep=4pt, itemsep=3pt, parsep=0pt}
+
+% Section titles: colored numeral + rule
+\titleformat{\section}
+  {\Large\bfseries\color{gv2xInk}}
+  {\tikz[baseline=(n.base)]{\node[fill=gv2xTeal,text=white,rounded corners=2pt,inner sep=3pt 7pt,font=\bfseries\small](n){\thesection};}}
+  {0.55em}
+  {}
+  [\vspace{-0.2em}{\color{gv2xTeal}\hrule height 0.6pt}\vspace{0.4em}]
+
+\titlespacing*{\section}{0pt}{2.2ex plus .2ex}{1.2ex plus .1ex}
+
+% Code / terminal blocks (left accent bar = ``CLI prompt'' feel)
+\makeatletter
+\newenvironment{terminal}{%
+  \begin{tcolorbox}[
+    enhanced,
+    breakable,
+    colback=gv2xCodeBg,
+    colframe=gv2xCodeFrame,
+    boxrule=0.6pt,
+    arc=3pt,
+    frame hidden,
+    borderline west={4pt}{0pt}{gv2xAccentBar},
+    left=10pt, right=12pt, top=8pt, bottom=8pt,
+    before skip=8pt, after skip=10pt,
+  ]%
+  \small\ttfamily
+}{%
+  \end{tcolorbox}%
+}
+\makeatother
+
+% Info / warning sidebars
+\newtcolorbox{infobox}[1][]{
+  colback=white,
+  colframe=gv2xTeal!35!white,
+  boxrule=0.9pt,
+  arc=4pt,
+  left=10pt, right=10pt, top=8pt, bottom=8pt,
+  title={\small\bfseries\color{gv2xInk}#1},
+  fonttitle=\bfseries,
+  before skip=6pt, after skip=8pt,
+}
+
+\newtcolorbox{tipbox}{
+  colback=gv2xTeal!6,
+  colframe=gv2xTeal!40,
+  boxrule=0.8pt,
+  arc=4pt,
+  left=10pt, right=10pt, top=8pt, bottom=8pt,
+  before skip=6pt, after skip=8pt,
+}
+
+% Title area
+\newcommand{\HeroTitle}{%
+  \begin{center}
+    \begin{tikzpicture}
+      \node[inner sep=0](T){%
+        \begin{minipage}{0.92\linewidth}
+          \centering
+          {\color{gv2xMuted}\small\scshape Reproducibility guide}\\[0.35em]
+          {\fontsize{22}{26}\selectfont\bfseries\color{gv2xInk}%
+            Green V2X\,\textemdash\,Energy-Aware Handoff}\\[0.25em]
+          {\Large\bfseries\color{gv2xTeal}%
+            Command reference \& run order}\\[0.9em]
+          {\color{gv2xTeal}\rule{0.42\linewidth}{1.2pt}}%
+          \hspace{0.35em}{\raisebox{-1pt}{\small\color{gv2xMuted}\faIcon{terminal}}\hspace{0.35em}}%
+          {\color{gv2xTeal}\rule{0.42\linewidth}{1.2pt}\\[0.85em]}
+          {\normalsize\color{gv2xMuted}
+            Ranesh Das Rik \,\textbullet\, Department of ETE \,\textbullet\, RUET}
+        \end{minipage}
+      };
+    \end{tikzpicture}
+  \end{center}
+  \vspace{0.6em}
+}
+
+\begin{document}
+\pagestyle{empty}
+\HeroTitle
+
+\begin{tcolorbox}[
+  colback=gv2xInk!4,
+  colframe=gv2xTeal!30,
+  arc=5pt,
+  boxrule=0.9pt,
+  left=12pt, right=12pt, top=10pt, bottom=10pt,
+  before skip=0pt, after skip=14pt,
+]
+\small
+\textbf{\color{gv2xTeal}\faIcon{lightbulb}}\hspace{0.35em}%
+\textbf{Abstract.}\hspace{0.35em}%
+This note lists executable steps to reproduce experiments in the \textbf{Green V2X} repository: setup, main suite, validation, weather sweeps, hyperparameter grids, quick checks, tests, and notebooks. Commands assume \textbf{Windows PowerShell} from the \textbf{repository root}. No single script runs everything; order reflects dependencies and cost (heavy jobs last).
+\end{tcolorbox}
+
+\tableofcontents
+\vspace{0.8em}
+{\color{gv2xTeal}\hrule height 0.7pt}
+\vspace{1.2em}
+
+\clearpage
+\pagestyle{plain}
+\pagenumbering{arabic}
+
+\section{Repository root}
+All commands assume you start in the project root:
+\begin{terminal}
+cd "D:\All Projects\Green V2X _Energy Aware Handoff"
+\end{terminal}
+On other machines, use your clone path. Artifacts default to \path{results/}; some scripts accept \path{--results-dir}.
+
+\section{One-time environment setup}\label{sec:setup}
+Create and activate a virtual environment, then install dependencies:
+\begin{terminal}
+python -m venv venv
+.\venv\Scripts\activate
+pip install -r requirements.txt
+\end{terminal}
+\begin{tipbox}
+\faIcon{leaf}\ \textbf{Tip:} Keep this shell open so \texttt{python} and \texttt{pytest} resolve to the venv for every step below.
+\end{tipbox}
+
+\section{Main research suite}
+Multi-seed baseline, statistics, plots, scaling, energy-model sensitivity, scenario diversity, and Bangladesh grid-intensity snapshots:
+\begin{terminal}
+python main.py
+\end{terminal}
+\begin{infobox}[\faIcon{folder-open}\ Outputs]
+Figures and JSON under \path{results/} (e.g.\ \path{simulation_results.json}, scaling and sensitivity JSON, scenario-diversity plots).
+\end{infobox}
+\begin{infobox}[\faIcon{clock}\ Runtime]
+Typically \textbf{tens of minutes to a few hours} on a laptop CPU (hardware \& load dependent).
+\end{infobox}
+
+\section{Comprehensive validation}
+Literature-scale EPB checks, multi-duration extrapolation, extended CO\textsubscript{2} example, related-work index. Either:
+\begin{terminal}
+python main.py --comprehensive-validation
+\end{terminal}
+or:
+\begin{terminal}
+python validation_runner.py
+\end{terminal}
+\begin{infobox}[\faIcon{file-alt}\ Artifacts]
+\path{results/comprehensive_validation.json}, \path{results/extrapolation_validation.png}.
+\end{infobox}
+
+\section{Weather robustness sweep}
+Mean and 95\% CIs across seeds for each weather profile:
+\begin{terminal}
+python weather_sweep.py
+\end{terminal}
+For geometry aligned with \texttt{paper\_baseline\_scenario} (\textbf{16} BS, \textbf{2800\,m}):
+\begin{terminal}
+python weather_sweep.py --num-base-stations 16 --area-size 2800 --results-dir results
+\end{terminal}
+Smoke or alternate output folder:
+\begin{terminal}
+python weather_sweep.py --num-base-stations 16 --area-size 2800 --results-dir results_smoke
+\end{terminal}
+Other flags: \texttt{--seeds}, \texttt{--weathers}, \texttt{--duration}, \texttt{--time-step}, \texttt{--num-vehicles}, \texttt{--verbose} (see \path{weather_sweep.py}).
+
+\section{Hyperparameter / connectivity grid sweep}
+Full Cartesian product over PHY and energy-aware knobs---\textbf{long} run (\(\sim\)\textbf{45--60\,min} typical laptop, machine-dependent):
+\begin{terminal}
+python sweep_connectivity_energy.py
+\end{terminal}
+Writes \path{results/parameter_sweep.json}.
+
+\section{Quick sanity checks}
+\begin{terminal}
+python verify_fixes.py
+python debug_metrics.py
+\end{terminal}
+
+\section{Inspect last baseline JSON}
+After \texttt{main.py} has written \path{results/simulation_results.json}:
+\begin{terminal}
+python check_results.py
+\end{terminal}
+
+\section{Automated tests}
+\begin{terminal}
+python -m pytest tests/ -v
+\end{terminal}
+
+\section{Optional notebooks}
+Jupyter is in \path{requirements.txt}. Explore:
+\begin{itemize}
+\item \path{notebooks/analysis.ipynb}
+\item \path{simulations/Untitled-1.ipynb}
+\end{itemize}
+These are optional; not part of the scripted pipeline.
+
+\section{Recommended ``run everything'' order}
+\begin{enumerate}
+\item One-time setup (\S\ref{sec:setup}).
+\item \texttt{python -m pytest tests/ -v}
+\item \texttt{python verify\_fixes.py} (\texttt{python debug\_metrics.py} optional)
+\item \texttt{python main.py}
+\item \texttt{python validation\_runner.py} \emph{or} \texttt{python main.py --comprehensive-validation}
+\item \texttt{python weather\_sweep.py} (set \texttt{--results-dir} / geometry as needed)
+\item \texttt{python sweep\_connectivity\_energy.py} \textbf{last} (largest batch).
+\end{enumerate}
+Notebooks: any time after setup.
+
+\section{Measuring wall-clock time}
+PowerShell:
+\begin{terminal}
+Measure-Command { python main.py }
+\end{terminal}
+Swap in \texttt{sweep\_connectivity\_energy.py} or any other script to profile it.
+
+\section{Further documentation}
+See \path{README.md} for repository layout and artifacts. This PDF focuses on \textbf{commands and order} only.
+
+\vfill
+\begin{center}
+{\small\color{gv2xMuted}%
+\faIcon{code}\;Green V2X $\cdot$ Reproducibility runbook $\cdot$ \texttt{green\_v2x\_runbook\_commands.tex}}
+\end{center}
+
+\end{document}
