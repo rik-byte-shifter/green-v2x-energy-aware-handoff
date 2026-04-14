@@ -211,7 +211,13 @@ def test_stronger_baselines_short_run():
     sim = V2XSimulator(cfg)
     sim.setup_network()
     sim.setup_vehicles()
-    for name in ("sinr", "load_aware_rssi"):
+    for name in (
+        "sinr",
+        "load_aware_rssi",
+        "literature_ul_ho",
+        "lb_aware_rsrp",
+        "mdpi_energy_efficient",
+    ):
         out = sim.run_algorithm(name)
         assert "stats" in out
         assert out["stats"]["total_bits"] >= 0

@@ -459,12 +459,18 @@ def main():
     es_lar_mean, es_lar_std = mean_std("energy_saving_vs_load_aware_rssi_percent")
     ho_mean, ho_std = mean_std("handoff_reduction_percent")
     evn_mean, evn_std = mean_std("energy_saving_vs_naive_percent")
+    evl_mean, evl_std = mean_std("energy_saving_vs_literature_ul_ho_percent")
+    evb_mean, evb_std = mean_std("energy_saving_vs_lb_aware_rsrp_percent")
+    evm_mean, evm_std = mean_std("energy_saving_vs_mdpi_energy_efficient_percent")
     rvn_mean, rvn_std = mean_std("rssi_vs_naive_energy_percent")
     es_tot_mean, es_tot_std = mean_std("energy_saving_total_joules_percent")
 
     ea_e = [r["energy_aware_stats"]["total_energy_joules"] for r in results_list]
     rssi_e = [r["rssi_stats"]["total_energy_joules"] for r in results_list]
     naive_e = [r["naive_nearest_stats"]["total_energy_joules"] for r in results_list]
+    lit_e = [r["literature_ul_ho_stats"]["total_energy_joules"] for r in results_list]
+    lb_e = [r["lb_aware_rsrp_stats"]["total_energy_joules"] for r in results_list]
+    mdpi_e = [r["mdpi_energy_efficient_stats"]["total_energy_joules"] for r in results_list]
 
     ea_epb = [r["energy_aware_stats"]["avg_energy_per_bit"] for r in results_list]
     rssi_epb = [r["rssi_stats"]["avg_energy_per_bit"] for r in results_list]
@@ -484,11 +490,17 @@ def main():
     )
     print(f"  Handoff reduction vs RSSI: {ho_mean:.2f}% +/- {ho_std:.2f}%")
     print(f"  Energy saving vs Naive:    {evn_mean:.2f}% +/- {evn_std:.2f}%")
+    print(f"  Energy saving vs Literature UL-HO: {evl_mean:.2f}% +/- {evl_std:.2f}%")
+    print(f"  Energy saving vs LB-aware RSRP: {evb_mean:.2f}% +/- {evb_std:.2f}%")
+    print(f"  Energy saving vs MDPI composite: {evm_mean:.2f}% +/- {evm_std:.2f}%")
     if not np.isnan(rvn_mean):
         print(f"  RSSI energy gain vs Naive: {rvn_mean:.2f}% +/- {rvn_std:.2f}%")
     print(f"  Total energy (J) - Energy-Aware:  {np.mean(ea_e):.2f} +/- {np.std(ea_e):.2f}")
     print(f"  Total energy (J) - RSSI:          {np.mean(rssi_e):.2f} +/- {np.std(rssi_e):.2f}")
     print(f"  Total energy (J) - Naive Nearest: {np.mean(naive_e):.2f} +/- {np.std(naive_e):.2f}")
+    print(f"  Total energy (J) - Literature UL-HO: {np.mean(lit_e):.2f} +/- {np.std(lit_e):.2f}")
+    print(f"  Total energy (J) - LB-aware RSRP: {np.mean(lb_e):.2f} +/- {np.std(lb_e):.2f}")
+    print(f"  Total energy (J) - MDPI composite: {np.mean(mdpi_e):.2f} +/- {np.std(mdpi_e):.2f}")
     ea_thr = [r["energy_aware_stats"]["avg_throughput_bps"] for r in results_list]
     rssi_thr = [r["rssi_stats"]["avg_throughput_bps"] for r in results_list]
     ea_thr_p5 = [r["energy_aware_stats"]["p5_throughput_bps"] for r in results_list]
@@ -532,14 +544,23 @@ def main():
     ea_co2 = [r["energy_aware_stats"]["co2_kg"] for r in results_list]
     rssi_co2 = [r["rssi_stats"]["co2_kg"] for r in results_list]
     naive_co2 = [r["naive_nearest_stats"]["co2_kg"] for r in results_list]
+    lit_co2 = [r["literature_ul_ho_stats"]["co2_kg"] for r in results_list]
+    lb_co2 = [r["lb_aware_rsrp_stats"]["co2_kg"] for r in results_list]
+    mdpi_co2 = [r["mdpi_energy_efficient_stats"]["co2_kg"] for r in results_list]
     ci = results_list[0]["energy_aware_stats"]["carbon_intensity_kg_per_kwh"]
     print(f"  Est. CO2 (kg) - Energy-Aware:  {np.mean(ea_co2):.6f} +/- {np.std(ea_co2):.6f}  (intensity {ci:g} kg/kWh)")
     print(f"  Est. CO2 (kg) - RSSI:          {np.mean(rssi_co2):.6f} +/- {np.std(rssi_co2):.6f}")
     print(f"  Est. CO2 (kg) - Naive Nearest: {np.mean(naive_co2):.6f} +/- {np.std(naive_co2):.6f}")
+    print(f"  Est. CO2 (kg) - Literature UL-HO: {np.mean(lit_co2):.6f} +/- {np.std(lit_co2):.6f}")
+    print(f"  Est. CO2 (kg) - LB-aware RSRP: {np.mean(lb_co2):.6f} +/- {np.std(lb_co2):.6f}")
+    print(f"  Est. CO2 (kg) - MDPI composite: {np.mean(mdpi_co2):.6f} +/- {np.std(mdpi_co2):.6f}")
 
     ea_py = [r["energy_aware_stats"]["co2_kg_per_vehicle_per_year"] for r in results_list]
     rssi_py = [r["rssi_stats"]["co2_kg_per_vehicle_per_year"] for r in results_list]
     naive_py = [r["naive_nearest_stats"]["co2_kg_per_vehicle_per_year"] for r in results_list]
+    lit_py = [r["literature_ul_ho_stats"]["co2_kg_per_vehicle_per_year"] for r in results_list]
+    lb_py = [r["lb_aware_rsrp_stats"]["co2_kg_per_vehicle_per_year"] for r in results_list]
+    mdpi_py = [r["mdpi_energy_efficient_stats"]["co2_kg_per_vehicle_per_year"] for r in results_list]
     print(
         f"  CO2 kg / vehicle / year - Energy-Aware:  {np.mean(ea_py):.6f} +/- {np.std(ea_py):.6f}"
     )
@@ -548,6 +569,15 @@ def main():
     )
     print(
         f"  CO2 kg / vehicle / year - Naive Nearest: {np.mean(naive_py):.6f} +/- {np.std(naive_py):.6f}"
+    )
+    print(
+        f"  CO2 kg / vehicle / year - Literature UL-HO: {np.mean(lit_py):.6f} +/- {np.std(lit_py):.6f}"
+    )
+    print(
+        f"  CO2 kg / vehicle / year - LB-aware RSRP: {np.mean(lb_py):.6f} +/- {np.std(lb_py):.6f}"
+    )
+    print(
+        f"  CO2 kg / vehicle / year - MDPI composite: {np.mean(mdpi_py):.6f} +/- {np.std(mdpi_py):.6f}"
     )
 
     leq_flags = [r.get("energy_aware_handoffs_leq_rssi") for r in results_list]
@@ -607,6 +637,9 @@ def main():
     ea_stats = last_comparison["energy_aware_stats"]
     rssi_stats = last_comparison["rssi_stats"]
     naive_stats = last_comparison["naive_nearest_stats"]
+    literature_stats = last_comparison["literature_ul_ho_stats"]
+    lb_aware_stats = last_comparison["lb_aware_rsrp_stats"]
+    mdpi_stats = last_comparison["mdpi_energy_efficient_stats"]
 
     print(f"\nEnergy-Aware Algorithm:")
     print(f"  Total Energy: {ea_stats['total_energy_joules']:.2f} J")
@@ -700,6 +733,36 @@ def main():
     )
     print(f"  Avg TX Power: {naive_stats['avg_tx_power']*1000:.2f} mW")
 
+    print(f"\nLiterature UL-HO Baseline (Jon et al. 2024):")
+    print(f"  Total Energy: {literature_stats['total_energy_joules']:.2f} J")
+    print(
+        f"  Est. CO2: {literature_stats['co2_kg']:.6f} kg ({literature_stats['co2_grams']:.3f} g)"
+    )
+    print(f"  Energy-per-Bit: {literature_stats['avg_energy_per_bit']*1e6:.4f} uJ/bit")
+    print(f"  Total Handoffs: {literature_stats['total_handoffs']}")
+    print(f"  Avg Throughput: {literature_stats['avg_throughput_bps']/1e6:.3f} Mbps")
+    print(f"  Outage Probability: {literature_stats['outage_probability_percent']:.2f}%")
+
+    print(f"\nLB-aware RSRP Baseline (Hatipoglu et al. 2025):")
+    print(f"  Total Energy: {lb_aware_stats['total_energy_joules']:.2f} J")
+    print(
+        f"  Est. CO2: {lb_aware_stats['co2_kg']:.6f} kg ({lb_aware_stats['co2_grams']:.3f} g)"
+    )
+    print(f"  Energy-per-Bit: {lb_aware_stats['avg_energy_per_bit']*1e6:.4f} uJ/bit")
+    print(f"  Total Handoffs: {lb_aware_stats['total_handoffs']}")
+    print(f"  Avg Throughput: {lb_aware_stats['avg_throughput_bps']/1e6:.3f} Mbps")
+    print(f"  Outage Probability: {lb_aware_stats['outage_probability_percent']:.2f}%")
+
+    print(f"\nMDPI Composite Baseline (Abdullah et al. 2024):")
+    print(f"  Total Energy: {mdpi_stats['total_energy_joules']:.2f} J")
+    print(
+        f"  Est. CO2: {mdpi_stats['co2_kg']:.6f} kg ({mdpi_stats['co2_grams']:.3f} g)"
+    )
+    print(f"  Energy-per-Bit: {mdpi_stats['avg_energy_per_bit']*1e6:.4f} uJ/bit")
+    print(f"  Total Handoffs: {mdpi_stats['total_handoffs']}")
+    print(f"  Avg Throughput: {mdpi_stats['avg_throughput_bps']/1e6:.3f} Mbps")
+    print(f"  Outage Probability: {mdpi_stats['outage_probability_percent']:.2f}%")
+
     print(f"\nIMPROVEMENTS (last seed):")
     print(f"  Energy Saving vs RSSI (EPB): {last_comparison['energy_saving_percent']:.2f}%")
     print(
@@ -716,6 +779,18 @@ def main():
     print(f"  CO2 Saving vs RSSI: {last_comparison['co2_saving_percent']:.2f}%")
     print(f"  Handoff Reduction vs RSSI: {last_comparison['handoff_reduction_percent']:.2f}%")
     print(f"  Energy Saving vs Naive: {last_comparison['energy_saving_vs_naive_percent']:.2f}%")
+    print(
+        "  Energy Saving vs Literature UL-HO: "
+        f"{last_comparison['energy_saving_vs_literature_ul_ho_percent']:.2f}%"
+    )
+    print(
+        "  Energy Saving vs LB-aware RSRP: "
+        f"{last_comparison['energy_saving_vs_lb_aware_rsrp_percent']:.2f}%"
+    )
+    print(
+        "  Energy Saving vs MDPI composite: "
+        f"{last_comparison['energy_saving_vs_mdpi_energy_efficient_percent']:.2f}%"
+    )
 
     print("\n" + "=" * 70)
     print("WHY ENERGY-AWARE WORKS (MECHANISM ANALYSIS)")

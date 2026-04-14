@@ -13,6 +13,9 @@ Discrete-event style simulation of **highway V2X uplink** with multiple base-sta
 | `sinr` | `src/algorithms/sinr_handoff.py` | SINR-based |
 | `load_aware_rssi` | `src/algorithms/load_aware_rssi_handoff.py` | RSSI with load bias |
 | `naive_nearest` | `src/algorithms/naive_nearest_handoff.py` | Geographic nearest BS |
+| `literature_ul_ho` | `src/algorithms/enhanced_uplink_literature_handoff.py` | Literature baseline from Jon et al. 2024 (load-gated UL-RSRP + A3 + TTT) |
+| `lb_aware_rsrp` | `src/algorithms/lb_aware_rsrp_handoff.py` | Literature baseline from Hatipoglu et al. 2025 (LB-aware RSRP + fallback candidates) |
+| `mdpi_energy_efficient` | `src/algorithms/mdpi_energy_efficient_handoff.py` | Literature baseline from Abdullah et al. 2024 (composite score with energy-aware context) |
 
 ---
 
@@ -78,7 +81,7 @@ python main.py
 
 This runs:
 
-- Multi-seed baseline comparison (`SEEDS` in `main.py`: `42, 123, 456, 789, 1011`)
+- Multi-seed baseline comparison (`SEEDS` in `main.py`: `42, 123, 456, 789, 1011, 2024, 3141, 5000, 7777, 9999, 1234, 8888, 34115, 27182, 11235`)
 - Statistical summary and paired t-tests (total energy and average EPB: energy-aware vs RSSI)
 - Plots via `ResultVisualizer.generate_all_plots()` → `results/`
 - Scaling study (`scaling_scenario`, vehicle counts 20–200)
@@ -94,7 +97,8 @@ This runs:
 python main.py --comprehensive-validation
 ```
 
-delegates to `validation_runner.run_comprehensive_validation()` (same as running `validation_runner.py` directly).
+delegates to `validation_runner.run_comprehensive_validation()`.
+This generates `results/extrapolation_validation.png`; to also write `results/comprehensive_validation.json`, run `validation_runner.py` directly.
 
 ### 2) Comprehensive validation
 
@@ -108,7 +112,8 @@ or:
 python main.py --comprehensive-validation
 ```
 
-Produces artifacts such as `results/comprehensive_validation.json` and `results/extrapolation_validation.png` (paths are set inside `validation_runner.py`).
+- `python validation_runner.py` writes both `results/comprehensive_validation.json` and `results/extrapolation_validation.png`.
+- `python main.py --comprehensive-validation` writes `results/extrapolation_validation.png` (no JSON unless a path is passed programmatically).
 
 ### 3) Weather sweep (uncertainty across seeds)
 
@@ -152,7 +157,7 @@ python -m pytest tests/ -v
 
 Each algorithm’s `stats` include energy and traffic (`total_energy_joules`, `avg_energy_per_bit`, `avg_throughput_bps`, `p5_throughput_bps`, …), handoff behavior (`total_handoffs`, `ping_pong_rate_percent`, `handoff_delay_*`, …), service quality (`avg_service_availability_percent`, …), **outage decomposition** (`outage_probability_percent`, `coverage_gap_percent`, `sinr_outage_percent`), and CO2 fields (`co2_kg`, `co2_breakdown_comprehensive`, `co2_scope_statement`, …).
 
-`run_comparison()` also reports relative improvements vs RSSI, SINR, load-aware RSSI, and naive nearest (energy, CO2, handoffs, etc.).
+`run_comparison()` also reports relative improvements vs RSSI, SINR, load-aware RSSI, naive nearest, and the three literature baselines (`literature_ul_ho`, `lb_aware_rsrp`, `mdpi_energy_efficient`) for energy/CO2/handoff comparisons.
 
 ---
 
@@ -174,7 +179,8 @@ Custom figures (e.g. Pareto-style plots) may be produced from notebooks rather t
 
 - **Seeds** are centralized in `main.py` (`SEEDS`, `SCALING_SEEDS`, `SENSITIVITY_SEEDS`, `SCENARIO_SEEDS`).
 - **Primary baseline** for `main.py` is `SimulationConfig.paper_baseline_scenario()`:
-  - `num_base_stations=16` (4×4 grid), `area_size=2800`, `bs_coverage_radius=450`, `weather_profile="clear"`, `shadowing_std_db=10.0`, with overlapping coverage so RSSI / SINR / load-aware / energy-aware policies can diverge meaningfully.
+  - `num_base_stations=16` (4×4 grid), `area_size=2800`, `bs_coverage_radius=650`, `duration=1200`, `weather_profile="clear"`, `shadowing_std_db=6.0`, `handoff_cooldown_s=8.0`, `energy_aware_min_energy_saving=0.20`, `energy_aware_time_to_trigger_s=4.0`, `snr_outage_threshold_db=-11.0`.
+  - This intentionally gives overlapping coverage so RSSI / SINR / load-aware / energy-aware / literature baselines can diverge meaningfully.
 - **Scaling experiment** uses `SimulationConfig.scaling_scenario()` (e.g. larger coverage radius) so high vehicle counts are not dominated by coverage gaps.
 - **BS capacity**: default `BSConfig.max_capacity=100` avoids toy capacity blocking at 200 vehicles.
 - **Simulator**: `V2XSimulator.run_algorithm()` resets network state between algorithms so BS load is not carried across runs.

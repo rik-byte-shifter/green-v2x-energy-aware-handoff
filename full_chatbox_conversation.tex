@@ -1,0 +1,638 @@
+% Compiles on Overleaf default pdfLaTeX and Xe/LuaLaTeX.
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.0cm]{geometry}
+\usepackage{xcolor}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{newpxtext}
+\else
+  \usepackage{fontspec}
+  \setmainfont{TeX Gyre Pagella}
+\fi
+\usepackage{fancyhdr}
+\usepackage{tcolorbox}
+\tcbuselibrary{breakable}
+\usepackage{fvextra}
+\usepackage{hyperref}
+\usepackage{microtype}
+\usepackage{ragged2e}
+\usepackage{titlesec}
+\usepackage{tikz}
+\usepackage{setspace}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textit{Green V2X Project Overview Dossier}}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\raggedbottom
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\setlength{\emergencystretch}{3em}
+\setstretch{1.03}
+\titleformat{\section}{\Large\bfseries}{}{0pt}{}
+\titleformat{\subsection}{\large\bfseries}{}{0pt}{}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  urlcolor=black
+}
+\fvset{
+  breaklines=true,
+  breakanywhere=true,
+  fontsize=\footnotesize,
+  baselinestretch=0.93
+}
+
+\definecolor{UserBG}{HTML}{F4F8FF}
+\definecolor{AsstBG}{HTML}{F6FBF7}
+\definecolor{UserBorder}{HTML}{335C99}
+\definecolor{AsstBorder}{HTML}{2E7D5B}
+\definecolor{TitleColor}{HTML}{102A43}
+\definecolor{SubtitleColor}{HTML}{486581}
+
+\newenvironment{userbox}
+  {\begin{tcolorbox}[
+    breakable,
+    colback=UserBG,
+    colframe=UserBorder,
+    title=Source Request Extract,
+    fonttitle=\bfseries\small\color{white},
+    coltitle=white,
+    colbacktitle=UserBorder,
+    boxrule=0.5pt,
+    arc=1.2mm,
+    left=1.4mm,right=1.4mm,top=0.8mm,bottom=0.8mm,
+    boxsep=0.6mm,
+    before skip=0pt,
+    after skip=0pt
+  ]}
+  {\end{tcolorbox}}
+
+\newenvironment{assistantbox}
+  {\begin{tcolorbox}[
+    breakable,
+    colback=AsstBG,
+    colframe=AsstBorder,
+    title=Project Overview Extract,
+    fonttitle=\bfseries\small\color{white},
+    coltitle=white,
+    colbacktitle=AsstBorder,
+    boxrule=0.5pt,
+    arc=1.2mm,
+    left=1.4mm,right=1.4mm,top=0.8mm,bottom=0.8mm,
+    boxsep=0.6mm,
+    before skip=0pt,
+    after skip=0pt
+  ]}
+  {\end{tcolorbox}}
+
+\begin{document}
+
+\begin{center}
+\begin{tikzpicture}
+\fill[TitleColor] (0,0) rectangle (13.4,1.4);
+\node[anchor=west,text=white,font=\bfseries\Large] at (0.35,0.92) {Green V2X \_Energy Aware Handoff};
+\node[anchor=west,text=white,font=\bfseries\large] at (0.35,0.42) {Comprehensive Project Overview Dossier};
+\end{tikzpicture}\\[6pt]
+{\normalsize\color{SubtitleColor} Full transcript content preserved verbatim (no text alteration)}\\[2pt]
+{\small\color{SubtitleColor} Presentation transformed from chat layout to overview-style archival report}
+\end{center}
+\vspace{10pt}
+
+\begin{userbox}
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+FIrst checkout the whole project.
+
+Then tell me what is this project about ?
+
+what is the algorithm here ?
+
+How everything works ?
+
+and also what goal/result is achieving this project ?
+
+I need simple but detailed explanation in easy words please
+\end{Verbatim}
+\end{userbox}
+
+\begin{assistantbox}
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+Here’s a concise picture of the project after reading the main docs and core code (no `git checkout` was needed—you meant “look over” the repo).
+
+## What this project is about
+
+**Green V2X** is a **computer simulation** of cars on a **highway** talking to **cell towers (base stations)** over the **uplink** (vehicle -> tower). In real life, a car must **choose which tower to use** as it moves; that choice is called **handoff**.
+
+This repo implements **several handoff rules**, especially one that tries to **save radio energy** (and then **CO2**, using grid electricity intensity). It is **not** a live network stack—it’s a **research-style discrete-time simulator** that steps time, moves vehicles, updates radio, counts handoffs, and totals energy and throughput.
+
+## What the main algorithm is (energy-aware handoff)
+
+The **star algorithm** is **`EnergyAwareHandoff`** in `src/algorithms/energy_aware_handoff.py`. In plain terms it does this:
+
+1. **For each candidate tower**, it estimates:
+   - **Transmit power** needed for a reliable link (path loss, weather, shadowing).
+   - **Data rate** from a Shannon-style formula using **SINR** (signal vs noise + interference).
+   - **Energy per bit (EPB)** = how many joules of device power you spend per bit sent, using the **energy model** (PA, circuits, baseband, etc.).
+2. It **combines EPB with tower load**: a tower with more users gets a **worse score** (higher “metric”), so the policy prefers **less loaded** cells when EPB is similar—**load balancing**.
+3. It applies **QoS filters** (minimum data rate, minimum SINR) so it doesn’t pick “cheap but useless” links.
+4. **Cell-edge penalty**: if you’re far from the tower (near the edge), the **metric is worse**, so it prefers **more central / stable** connections when possible.
+5. **When to actually hand off** (`should_handoff`) uses:
+   - **Escape** if the current tower is **overloaded**.
+   - **Urgent** switch if **SINR is bad** or **EPB is too high** (bad link).
+   - Otherwise: **hysteresis**—only switch if the new tower is **meaningfully better** in energy terms (not tiny gains).
+   - **Don’t** switch to a clearly **worse SINR** link.
+   - **Time-to-trigger (TTT)** and **cooldowns** so cars don’t **ping-pong** between towers.
+
+**Baselines** (for comparison): strongest **RSSI**, **SINR**-based, **load-aware RSSI**, and **nearest tower** geographically. These are classic or simple rules; the energy-aware one is the one that **explicitly optimizes EPB + load + stability**.
+
+## How everything works (end-to-end)
+
+1. **`SimulationConfig`** (`simulations/config.py`) sets the world: area size, number of towers, vehicles, speeds, **highway lanes**, **weather profile**, **carbon intensity** (kg CO2 per kWh), duration, time step, etc.
+2. **`V2XSimulator`** (`simulations/simulator.py`):
+   - Places **base stations** on a **grid**.
+   - Spawns **vehicles** (highway mode: fixed lane centers, lane speeds, optional lane changes).
+   - Each **time step**: vehicles move, **shadowing/SINR/interference** are computed (cached per step for fairness), each algorithm decides **stay or hand off**.
+   - **Energy** accumulates from **transmit power × time**, **handoff overhead** (extra energy and delay), **bits sent**, etc.
+   - `run_comparison()` runs **each algorithm** with a **fresh reset** of vehicle and BS state so results are fair.
+3. **`main.py`** runs **multi-seed** experiments, **paired t-tests** (e.g. RSSI vs energy-aware), **plots**, **scaling** (more vehicles), **energy-parameter sensitivity**, **scenario diversity** (weather / urban), and optional **Bangladesh grid** CO2 numbers.
+
+So: **config -> build map -> simulate time -> policies differ -> metrics compared**.
+
+## Goal and what result it achieves
+
+**Goal:** Show that **handoff can be chosen to reduce uplink energy** (and **CO2**) compared to usual signals-only rules, **without** necessarily giving up throughput, and ideally with **fewer unnecessary handoffs** or **better stability** in some cases.
+
+**Typical outputs** (under `results/`, described in the README):
+
+- **Energy saving %** (energy-aware vs RSSI and others), **energy per bit**, **total joules**.
+- **Handoffs**, **ping-pong**, **handoff delay**, **service availability**, **outage** (coverage gaps vs SINR).
+- **CO2** estimates from energy × **grid carbon intensity**.
+- **Plots** (bars, CDFs, scaling curves, weather sweeps, etc.).
+
+The README also notes a **sanity check**: e.g. **>15% EPB saving vs RSSI** on at least one seed in the paper baseline scenario—this is a **project-specific success criterion**, not a universal law.
+
+## In one sentence:
+
+This project **simulates highway V2X**, compares **how handoff is decided**, and argues that an **energy- and load-aware** policy can **use less transmit energy and associated CO2** than **RSSI/SINR/nearest** baselines, while reporting **full radio and QoS-style statistics**—all in **software**, for **research and reporting** rather than deployment in real cars.
+\end{Verbatim}
+\end{assistantbox}
+
+\begin{userbox}
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+Now check the whole project rigorously and thoroghly.
+Deeply understand each and everything of this project.
+Then provide me a full detailed summary 
+\end{Verbatim}
+\end{userbox}
+
+\begin{assistantbox}
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+## Project Deep-Dive Summary
+
+This project is a **research-oriented V2X handoff simulation framework** that compares multiple handoff strategies with a strong focus on **energy efficiency and CO2 reduction**, while still tracking QoS-like behavior (throughput, outage, availability, handoff stability).
+
+## What the project is, in one line
+
+It simulates moving vehicles and cellular base stations over time, runs several handoff algorithms under matched conditions, and reports whether the custom **energy-aware handoff** outperforms standard baselines.
+
+## Repository architecture
+
+- `main.py`: primary experiment orchestrator (baseline, multi-seed stats, t-tests, scaling, sensitivity, scenario diversity, plotting).
+- `simulations/config.py`: all simulation/scenario parameters and scenario factory presets.
+- `simulations/simulator.py`: core engine (`V2XSimulator`) and per-algorithm execution/comparison logic.
+- `src/models/*`: physical/network entities and models (`vehicle`, `basestation`, `channel`, `weather`, `energy`).
+- `src/algorithms/*`: 8 handoff algorithms (custom + classical + literature-inspired baselines).
+- `src/utils/visualization.py`: plot generation for result analysis.
+- `validation_runner.py` + `simulations/validator.py`: extrapolation and hardware/CO2 scope validation.
+- `weather_sweep.py`, `sweep_connectivity_energy.py`: robustness/sensitivity sweeps.
+- `tests/test_simulation.py`: pytest-based checks (mostly smoke/invariant-level).
+- `results/*`: generated outputs (JSON + PNG + markdown notes).
+
+## End-to-end execution flow
+
+- `main.py` loads `SimulationConfig.paper_baseline_scenario()`.
+- For each seed in a 15-seed list:
+  - create simulator, run `run_comparison()`.
+- `run_comparison()`:
+  - create BS grid once,
+  - for each algorithm: re-seed RNG, regenerate vehicles, run algorithm.
+- `run_algorithm()`:
+  - time-step loop with movement, candidate selection, handoff decision, energy accounting, outage/availability tracking.
+- After seeds:
+  - compute mean/std and paired t-tests (`RSSI` vs `energy_aware`),
+  - write `results/multiseed_summary.json`,
+  - save last-seed full snapshot `results/simulation_results.json`,
+  - generate plot set,
+  - run scaling/sensitivity/scenario-diversity studies.
+
+## Core simulation model (important mechanics)
+
+- **Mobility**: highway lanes with lane-dependent speeds, stochastic lane switching, wrap-around longitudinal movement.
+- **Topology**: BSs on grid; each has coverage radius and capacity.
+- **Channel**: path loss + weather attenuation + shadowing + fading + interference.
+- **Link rate**: Shannon-style over 20 MHz with outage thresholding.
+- **Energy model**: transmit chain power includes PA inefficiency + circuit + baseband + cooling.
+- **CO2 model**: converts Joules -> kWh -> kgCO2 via configurable grid intensity, plus optional infrastructure/embodied extensions.
+
+## Handoff algorithms implemented
+
+1. `energy_aware`: EPB + load-aware metric, QoS filtering, SINR guard, hysteresis, cooldown, TTT, forced triggers (overload/low-SINR/high-EPB).
+2. `rssi`: strongest received power + RSSI hysteresis.
+3. `sinr`: strongest SINR + hysteresis.
+4. `load_aware_rssi`: maximize `RSSI - alpha*load`.
+5. `naive_nearest`: nearest in-coverage BS (no signal quality intelligence).
+6. `literature_ul_ho`: load-gated UL-RSRP + A3 + TTT (Jon et al. baseline).
+7. `lb_aware_rsrp`: load-state-aware candidate staging + A3 + TTT (Hatipoglu et al. baseline).
+8. `mdpi_energy_efficient`: weighted composite score (RSSI/SINR/BUE/Econs/MUE/QoS) with trigger gates (Abdullah et al. baseline).
+
+## Metric system and what is reported
+
+Per algorithm it reports:
+- energy (`total_energy_joules`, `avg_energy_per_bit`),
+- traffic (`avg_throughput_bps`, `p5_throughput_bps`),
+- reliability (`outage_probability_percent`, `coverage_gap_percent`, `sinr_outage_percent`),
+- stability (`total_handoffs`, ping-pong counts/rate, handoff delay),
+- service continuity (`avg_service_availability_percent`, p5 availability),
+- environmental impact (`co2_kg`, annualized per-vehicle CO2, comprehensive CO2 breakdown).
+
+## Current empirical picture from saved outputs
+
+From `results/multiseed_summary.json`:
+- EPB saving (EA vs RSSI): **15.26% ± 1.07%**
+- Total energy saving: **9.09% ± 0.55%**
+- Handoff reduction: **20.52% ± 0.54%**
+- Paired tests highly significant (`p ~ 1e-18`, `1e-17`)
+
+From `results/scaling_results.json`:
+- savings stay around **23.15%–23.43%** from 20 to 200 vehicles.
+
+From `results/energy_model_sensitivity.json`:
+- savings remain positive across PA efficiency and TX-circuit sweeps (~14–15% range).
+
+From `results/scenario_diversity_results.json`:
+- clear: ~17.4%, heavy rain: ~48.8%, urban dense: ~31.4%.
+
+From `results/weather_sweep.json`:
+- positive savings across all listed weather profiles, with stronger gains in harsh conditions.
+
+## Validation and testing maturity
+
+- Validation scripts exist for:
+  - hardware anchor sanity checks,
+  - duration/extrapolation stability,
+  - CO2 scope reporting.
+- Test suite exists but is concentrated in one file and is mostly:
+  - invariant/smoke checks,
+  - not deep branch-level verification of algorithm decision logic.
+- Strong enough for regression smoke, weaker for formal algorithmic correctness guarantees.
+
+## Important inconsistencies / technical debt found
+
+- **README drift**: some documented baseline values (seed count and certain baseline parameters) do not match current `main.py` / `config.py`.
+- **Result interpretation risk**: `simulation_results.json` is last-seed snapshot; multi-seed claims should use `multiseed_summary.json`.
+- **Path duplication noise**: Windows `\` and POSIX `/` path variants appear in listings/tool outputs, creating apparent duplicates.
+- **Repository hygiene**: generated artifacts and cache files (`__pycache__`, `.pyc`, many result files) are present in working tree.
+- **Config validation style**: heavy use of `assert` in config checks (can be bypassed under optimized Python runs).
+
+## Overall assessment
+
+The project is **substantive and technically rich**, with a clear architecture and a credible experiment pipeline.  
+Its strongest points are:
+- fair seed-controlled comparisons,
+- broad metrics (energy + service + environmental),
+- multi-scenario robustness analysis,
+- publishable artifact generation.
+
+Its weakest points are:
+- documentation drift,
+- limited depth of automated tests for decision-logic correctness,
+- output/repo clutter from generated artifacts.
+
+If you want, next I can produce a **module-by-module annotated map** (every `.py` file with purpose, key classes/functions, and dependencies) as a second, even more exhaustive layer.
+\end{Verbatim}
+\end{assistantbox}
+
+\begin{userbox}
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+Now check out the latest full run of this project. Check all the results the run has created.E every single one. each and every result it created.
+
+Then provide me brief and detailed result of the whole latest full run of this project
+\end{Verbatim}
+\end{userbox}
+
+\begin{assistantbox}
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+I checked **every unique file currently in `results/`** (JSON, MD, and all PNG plots).  
+There are path-separator duplicates (`/` and `\`) in listing output, but they point to the same files.
+
+## Brief result (latest full run)
+
+The latest full `main.py` run is consistent and strong:
+
+- **Multi-seed headline (`multiseed_summary.json`)**
+  - EA vs RSSI EPB saving: **15.26% ± 1.07%**
+  - EA vs RSSI total-energy saving: **9.09% ± 0.55%**
+  - Handoff reduction: **20.52% ± 0.54%**
+  - Paired t-tests: very strong significance (`p ≈ 1.5e-18`, `1.65e-17`)
+
+- **Last-seed snapshot (`simulation_results.json`, seed `11235`)**
+  - EA beats RSSI on EPB, throughput, outage, and handoff count.
+  - MDPI baseline has very low total Joules but **severe service collapse** (very high outage, low throughput).
+
+- **Scalability/sensitivity/diversity outputs** are coherent and positive.
+- Weather sweep + validation + parameter sweep artifacts are also present and valid.
+
+---
+
+## Detailed result of the whole latest output set
+
+### 1) Core full-run artifacts (`main.py`)
+
+### `simulation_results.json` (last seed: `11235`, clear weather, 20 vehicles, 16 BS, 1200s)
+Key algorithms:
+
+- **Energy-Aware**
+  - `total_energy_joules`: **21162.94**
+  - `avg_energy_per_bit`: **3.605e-08**
+  - `total_handoffs`: **2246**
+  - `avg_throughput_bps`: **24.46 Mbps**
+  - `outage_probability_percent`: **16.64%**
+  - `co2_kg`: **0.002939**
+
+- **RSSI**
+  - `total_energy_joules`: **23266.31**
+  - `avg_energy_per_bit`: **4.295e-08**
+  - `total_handoffs`: **2788**
+  - `avg_throughput_bps`: **22.57 Mbps**
+  - `outage_probability_percent`: **23.49%**
+  - `co2_kg`: **0.003231**
+
+- **Computed from these last-seed values**
+  - EPB saving (EA vs RSSI): ~**16.05%**
+  - Total-energy saving: ~**9.04%**
+  - Handoff reduction: ~**19.44%**
+  - Outage reduction: ~**6.85 percentage points**
+
+Other baselines (same file):
+- `sinr`: better than RSSI but below EA.
+- `load_aware_rssi`: close to RSSI.
+- `naive_nearest`: lower total Joules but slightly worse EPB and lower throughput.
+- `literature_ul_ho`, `lb_aware_rsrp`: fewer handoffs but weaker EPB/outage.
+- `mdpi_energy_efficient`: minimal handoffs/energy but **very poor service** (throughput collapse, outage ~68%).
+
+### `multiseed_summary.json` (15 seeds)
+- Confirms EA gains are not seed-specific:
+  - EPB: **15.26% mean saving**
+  - Total Joules: **9.09% mean saving**
+  - Handoffs: **20.52% mean reduction**
+  - Statistical significance is very strong.
+
+### 2) Experiment extensions from same full run
+
+### `scaling_results.json` + `scaling_energy_saving_vs_vehicles.png`
+- Vehicle counts: 20, 50, 100, 200.
+- Savings remain very stable: roughly **23.15%–23.43%**.
+- Plot confirms no collapse at high load.
+
+### `energy_model_sensitivity.json` + `energy_model_sensitivity.png` + `energy_model_justification.md`
+- PA efficiency sweep (0.25–0.45): mean savings ~**14.43%–15.15%**.
+- TX-circuit sweep (0.05–0.15 W): mean savings ~**14.21%–15.17%**.
+- Conclusion: EA benefit is robust to reasonable energy-model parameter variation.
+
+### `scenario_diversity_results.json` + `scenario_diversity_energy_saving.png`
+- Clear weather: **17.38%**
+- Heavy rain: **48.76%**
+- Urban dense: **31.35%**
+- Claim in file (“positive in all tested scenarios”) is supported.
+
+### 3) Weather robustness outputs (present and valid)
+
+### `weather_sweep.json` + 3 weather PNGs
+Means by weather:
+- Clear: ~**16.42%** energy saving
+- Light rain: ~**20.29%**
+- Heavy rain: ~**49.85%**
+- Snow: ~**56.87%**
+- Fog: ~**29.93%**
+- Thunderstorm: ~**69.46%**
+- Dust/sand storm: ~**55.49%**
+Also includes CI95 for energy/handoff/CO2 savings.
+
+### 4) Validation outputs (present and valid)
+
+### `comprehensive_validation.json` + `extrapolation_validation.png`
+- Hardware validation: `validation_passed: true` (OBU in-scope anchor passed).
+- Extrapolation study: stable rates across 300–7200s:
+  - energy/s CV ~**0.21%**
+  - CO2/s CV ~**0.21%**
+  - handoffs/s CV ~**0.50%**
+- `extrapolation_valid: true`.
+
+### 5) Parameter sweep output (present and parsed)
+
+### `parameter_sweep.json`
+- Grid sweep artifact is valid and populated.
+- Contains many configurations over coverage radius, TX max power, SINR trigger, EPB limit, hysteresis.
+- Observed energy-saving span in file is roughly **~3.23% to ~6.90%** (tradeoff-focused sweep, not the same as core baseline reporting).
+
+### 6) Plot-by-plot check (all visual artifacts verified)
+
+I opened and checked all plot files:
+- `bar_co2_comparison.png`
+- `bar_comparison.png`
+- `energy_comparison.png`
+- `cumulative_co2.png`
+- `energy_per_vehicle_cdf.png`
+- `tx_power_distribution.png`
+- `bs_load_distribution.png`
+- `sinr_histogram.png`
+- `network_topology.png`
+- `scaling_energy_saving_vs_vehicles.png`
+- `energy_model_sensitivity.png`
+- `scenario_diversity_energy_saving.png`
+- `weather_sweep_energy_saving.png`
+- `weather_sweep_handoff_reduction.png`
+- `weather_sweep_co2_saving.png`
+- `extrapolation_validation.png`
+- `pareto_frontier.png` (present; likely notebook-generated)
+
+---
+
+## Final takeaway
+
+The latest full result set is internally consistent and supports the same conclusion across multiple views:
+
+- **Energy-Aware handoff consistently outperforms RSSI on energy-per-bit and handoff stability**, while generally improving service quality metrics.
+- The gains are **multi-seed significant**, **scalable**, and **robust under sensitivity/scenario/weather variations**.
+- A few alternative baselines can lower absolute Joules in some snapshots, but often by sacrificing throughput/availability, which the EA method avoids better overall.
+\end{Verbatim}
+\end{assistantbox}
+
+\begin{userbox}
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+Not only plots.
+Every output which was produced when the full project ran.
+
+Also explicitely tell me in details about all the baseline comparison
+\end{Verbatim}
+\end{userbox}
+
+\begin{assistantbox}
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+Perfect request. I checked the latest **full `main.py` run output log** and all generated artifacts.
+
+## Latest full run: what it produced (everything)
+
+From the latest successful full run:
+- **Exit status:** success (`exit_code: 0`)
+- **Runtime:** ~9,772,093 ms (~2h 42m 52s)
+- **Terminal outputs produced:**
+  - Per-seed algorithm run outputs
+  - Per-seed comparison summaries
+  - Multi-seed statistics + paired t-tests
+  - Scaling experiment logs
+  - Energy-model sensitivity logs
+  - Scenario-diversity logs
+  - Final last-seed detailed summary
+  - Mechanism analysis section (“why EA works”)
+  - Bangladesh grid-intensity sensitivity section
+  - Final completion banner
+
+### Files produced/updated by this full run
+- `results/simulation_results.json`
+- `results/multiseed_summary.json`
+- `results/energy_comparison.png`
+- `results/cumulative_co2.png`
+- `results/bar_comparison.png`
+- `results/bar_co2_comparison.png`
+- `results/energy_per_vehicle_cdf.png`
+- `results/tx_power_distribution.png`
+- `results/bs_load_distribution.png`
+- `results/sinr_histogram.png`
+- `results/network_topology.png`
+- `results/scaling_energy_saving_vs_vehicles.png`
+- `results/scaling_results.json`
+- `results/energy_model_sensitivity.png`
+- `results/energy_model_sensitivity.json`
+- `results/energy_model_justification.md`
+- `results/scenario_diversity_energy_saving.png`
+- `results/scenario_diversity_results.json`
+
+---
+
+## Full baseline comparison (explicit + detailed)
+
+I’m giving both:
+1) **Multi-seed baseline comparisons** (most reliable headline), and  
+2) **Last-seed detailed snapshot** (seed `11235`) for concrete numbers.
+
+## 1) Multi-seed baseline comparison (from run log)
+
+Energy-Aware (EA) vs each baseline in avg EPB:
+
+- vs `rssi`: **+15.26% +- 1.07%**
+- vs `sinr`: **+11.03% +- 1.21%**
+- vs `load_aware_rssi`: **+15.42% +- 1.15%**
+- vs `naive_nearest`: **+2.70% +- 1.32%**
+- vs `literature_ul_ho`: **+15.31% +- 1.07%**
+- vs `lb_aware_rsrp`: **+15.21% +- 1.24%**
+- vs `mdpi_energy_efficient`: **+35.32% +- 6.68%**
+
+Other multi-seed baseline context:
+- EA total energy mean: **21280.15 J**
+- RSSI total energy mean: **23409.17 J**
+- EA outage mean: **16.37%** vs RSSI **22.75%**
+- EA avg throughput: **24.265 Mbps** vs RSSI **22.616 Mbps**
+- EA service availability: **83.64%** vs RSSI **77.25%**
+- EA ping-pong rate: **20.46%** vs RSSI **34.54%**
+- Paired tests (EA better than RSSI): highly significant (`p ~ 1e-18`, `1e-17`)
+
+---
+
+## 2) Last-seed detailed baseline comparison (seed 11235)
+
+Reference EA metrics:
+- Energy: **21162.94 J**
+- EPB: **3.605e-08 J/bit**
+- Handoffs: **2246**
+- Throughput: **24.459 Mbps** (P5: **23.118 Mbps**)
+- Outage: **16.64%**
+- Availability: **83.36%**
+- CO2: **0.002939 kg**
+
+### EA vs `rssi`
+- EPB saving: **16.05%**
+- Total-energy saving: **9.04%**
+- Handoffs reduced: **19.44%** (2246 vs 2788)
+- Throughput higher: 24.459 vs 22.573 Mbps
+- Outage lower: 16.64% vs 23.49%
+- Availability higher: 83.36% vs 76.51%
+- CO2 lower: 0.002939 vs 0.003231 kg
+
+### EA vs `sinr`
+- EPB saving: **12.81%**
+- Total-energy saving: ~**7.02%**
+- Same handoff count as RSSI baseline had in this run (EA still lower)
+- Better throughput/outage/availability than SINR baseline.
+
+### EA vs `load_aware_rssi`
+- EPB saving: **16.32%**
+- Total-energy saving: ~**9.14%**
+- Handoffs: EA lower (2246 vs 2790)
+- Throughput and outage both better for EA.
+
+### EA vs `naive_nearest`
+- EPB saving: **1.48%** (small but positive)
+- **Important tradeoff:** naive has lower total Joules and much fewer handoffs (632), but EA still gives:
+  - better throughput
+  - lower outage
+  - better availability
+  - better EPB quality
+
+### EA vs `literature_ul_ho`
+- EPB saving: **16.32%**
+- Throughput better, outage much better (16.64% vs 24.75%)
+- But EA has more handoffs than this baseline (2246 vs 1872)
+
+### EA vs `lb_aware_rsrp`
+- EPB saving: **16.92%**
+- Throughput/outage better for EA
+- EA again has more handoffs than this baseline (2246 vs 1668)
+
+### EA vs `mdpi_energy_efficient`
+- EPB saving: **30.42%**
+- MDPI shows very low total energy and very few handoffs (**28**) but with severe QoS collapse:
+  - throughput only **8.293 Mbps**
+  - outage **68.25%**
+  - availability **31.75%**
+- So EA is far better on service reliability while also better on EPB efficiency.
+
+---
+
+## Additional outputs present in `results/` (outside this specific main full-run block)
+
+These also exist and are valid artifacts in your folder:
+- `results/weather_sweep.json` + weather sweep plots
+- `results/comprehensive_validation.json`
+- `results/extrapolation_validation.png`
+- `results/parameter_sweep.json`
+- `results/pareto_frontier.png`
+
+If you want, I can now give you a **single publishable table** (algorithm-by-algorithm, all key metrics, ranked) in the exact format for your paper/report.
+\end{Verbatim}
+\end{assistantbox}
+
+\begin{userbox}
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+Okay Now check our this whole chatbox conversation.
+
+Just convert this whole chat into a very beautiful and cool latex file.
+
+NO TEXT ALTERATION FROM THE CHAT.
+Just convert the full chat into a very detailed and brief and good looking latex file.
+\end{Verbatim}
+\end{userbox}
+
+\end{document}

@@ -23,6 +23,11 @@ from src.algorithms.rssi_handoff import RSSIHandoff
 from src.algorithms.sinr_handoff import SINRHandoff
 from src.algorithms.load_aware_rssi_handoff import LoadAwareRSSIHandoff
 from src.algorithms.naive_nearest_handoff import NaiveNearestHandoff
+from src.algorithms.enhanced_uplink_literature_handoff import (
+    EnhancedUplinkLiteratureHandoff,
+)
+from src.algorithms.lb_aware_rsrp_handoff import LBAwareRSRPHandoff
+from src.algorithms.mdpi_energy_efficient_handoff import MDPIEnergyEfficientHandoff
 from simulations.config import SimulationConfig
 
 
@@ -90,12 +95,20 @@ class V2XSimulator:
         self.sinr_algo = SINRHandoff()
         self.load_aware_rssi_algo = LoadAwareRSSIHandoff()
         self.naive_nearest_algo = NaiveNearestHandoff()
+        self.literature_ul_ho_algo = EnhancedUplinkLiteratureHandoff()
+        self.lb_aware_rsrp_algo = LBAwareRSRPHandoff()
+        self.mdpi_energy_efficient_algo = MDPIEnergyEfficientHandoff(
+            tx_power_max_watts=self.config.tx_power_max_watts
+        )
 
         for _algo in (
             self.energy_aware_algo,
             self.rssi_algo,
             self.sinr_algo,
             self.load_aware_rssi_algo,
+            self.literature_ul_ho_algo,
+            self.lb_aware_rsrp_algo,
+            self.mdpi_energy_efficient_algo,
         ):
             _algo.energy_model = self.energy_model
 
@@ -105,6 +118,9 @@ class V2XSimulator:
             'sinr': {},
             'load_aware_rssi': {},
             'naive_nearest': {},
+            'literature_ul_ho': {},
+            'lb_aware_rsrp': {},
+            'mdpi_energy_efficient': {},
         }
 
     # ------------------------------------------------------------------
@@ -377,6 +393,12 @@ class V2XSimulator:
             algo = self.load_aware_rssi_algo
         elif algorithm_name == 'naive_nearest':
             algo = self.naive_nearest_algo
+        elif algorithm_name == 'literature_ul_ho':
+            algo = self.literature_ul_ho_algo
+        elif algorithm_name == 'lb_aware_rsrp':
+            algo = self.lb_aware_rsrp_algo
+        elif algorithm_name == 'mdpi_energy_efficient':
+            algo = self.mdpi_energy_efficient_algo
         else:
             algo = self.rssi_algo
 
@@ -429,7 +451,13 @@ class V2XSimulator:
                     self.base_stations,
                     link_metrics_getter=get_link_metrics_init,
                 )
-            elif algorithm_name in ('sinr', 'load_aware_rssi'):
+            elif algorithm_name in (
+                'sinr',
+                'load_aware_rssi',
+                'literature_ul_ho',
+                'lb_aware_rsrp',
+                'mdpi_energy_efficient',
+            ):
                 best_bs, info = algo.select_best_bs(
                     vehicle,
                     self.base_stations,
@@ -535,6 +563,48 @@ class V2XSimulator:
                             else float('inf')
                         )
 
+                elif algorithm_name == 'literature_ul_ho':
+                    candidate_bs, info = algo.select_best_bs(
+                        vehicle,
+                        self.base_stations,
+                        link_metrics_getter=get_link_metrics,
+                    )
+                    if candidate_bs:
+                        cand_row = get_link_metrics(vehicle, candidate_bs, False)
+                        candidate_epb = (
+                            cand_row['energy_per_bit']
+                            if cand_row is not None
+                            else float('inf')
+                        )
+
+                elif algorithm_name == 'lb_aware_rsrp':
+                    candidate_bs, info = algo.select_best_bs(
+                        vehicle,
+                        self.base_stations,
+                        link_metrics_getter=get_link_metrics,
+                    )
+                    if candidate_bs:
+                        cand_row = get_link_metrics(vehicle, candidate_bs, False)
+                        candidate_epb = (
+                            cand_row['energy_per_bit']
+                            if cand_row is not None
+                            else float('inf')
+                        )
+
+                elif algorithm_name == 'mdpi_energy_efficient':
+                    candidate_bs, info = algo.select_best_bs(
+                        vehicle,
+                        self.base_stations,
+                        link_metrics_getter=get_link_metrics,
+                    )
+                    if candidate_bs:
+                        cand_row = get_link_metrics(vehicle, candidate_bs, False)
+                        candidate_epb = (
+                            cand_row['energy_per_bit']
+                            if cand_row is not None
+                            else float('inf')
+                        )
+
                 else:  # rssi
                     candidate_bs, info = algo.select_best_bs(
                         vehicle,
@@ -594,6 +664,86 @@ class V2XSimulator:
                     )
                 elif algorithm_name == 'naive_nearest':
                     should_ho = algo.should_handoff(vehicle, current_bs, candidate_bs)
+                elif algorithm_name == 'literature_ul_ho':
+                    current_metric = algo.link_metric_value(
+                        vehicle,
+                        current_bs,
+                        link_metrics_getter=get_link_metrics,
+                    )
+                    candidate_metric = algo.link_metric_value(
+                        vehicle,
+                        candidate_bs,
+                        link_metrics_getter=get_link_metrics,
+                    )
+                    if current_metric is None:
+                        current_metric = float('-inf')
+                    if candidate_metric is None:
+                        candidate_metric = float('-inf')
+                    should_ho = algo.should_handoff(
+                        vehicle,
+                        current_bs,
+                        candidate_bs,
+                        current_metric,
+                        candidate_metric,
+                        current_time=current_time,
+                    )
+                elif algorithm_name == 'lb_aware_rsrp':
+                    current_metric = algo.link_metric_value(
+                        vehicle,
+                        current_bs,
+                        link_metrics_getter=get_link_metrics,
+                    )
+                    candidate_metric = algo.link_metric_value(
+                        vehicle,
+                        candidate_bs,
+                        link_metrics_getter=get_link_metrics,
+                    )
+                    if current_metric is None:
+                        current_metric = float('-inf')
+                    if candidate_metric is None:
+                        candidate_metric = float('-inf')
+                    should_ho = algo.should_handoff(
+                        vehicle,
+                        current_bs,
+                        candidate_bs,
+                        current_metric,
+                        candidate_metric,
+                        current_time=current_time,
+                    )
+                elif algorithm_name == 'mdpi_energy_efficient':
+                    current_metric = algo.link_metric_value(
+                        vehicle,
+                        current_bs,
+                        link_metrics_getter=get_link_metrics,
+                    )
+                    candidate_metric = algo.link_metric_value(
+                        vehicle,
+                        candidate_bs,
+                        link_metrics_getter=get_link_metrics,
+                    )
+                    current_row = get_link_metrics(vehicle, current_bs, False)
+                    current_rssi = None if current_row is None else current_row['rx_power']
+                    current_sinr = None if current_row is None else current_row['snr']
+                    current_bue_proxy = None
+                    if current_row is not None:
+                        tx_val = float(current_row.get('tx_power', 0.0))
+                        max_tx = max(1e-9, self.config.tx_power_max_watts)
+                        current_bue_proxy = max(0.0, min(1.0, 1.0 - tx_val / max_tx))
+                    if current_metric is None:
+                        current_metric = float('-inf')
+                    if candidate_metric is None:
+                        candidate_metric = float('-inf')
+                    should_ho = algo.should_handoff(
+                        vehicle,
+                        current_bs,
+                        candidate_bs,
+                        current_metric,
+                        candidate_metric,
+                        current_time=current_time,
+                        current_rssi_dbm=current_rssi,
+                        current_sinr_db=current_sinr,
+                        current_bue_proxy=current_bue_proxy,
+                    )
                 elif algorithm_name == 'sinr':
                     current_row = get_link_metrics(vehicle, current_bs, False)
                     candidate_row = get_link_metrics(vehicle, candidate_bs, False)
@@ -991,12 +1141,27 @@ class V2XSimulator:
         np.random.seed(self.config.seed)
         self.setup_vehicles()
         self.results['naive_nearest'] = self.run_algorithm('naive_nearest')
+        # --- Literature UL-HO baseline ---
+        np.random.seed(self.config.seed)
+        self.setup_vehicles()
+        self.results['literature_ul_ho'] = self.run_algorithm('literature_ul_ho')
+        # --- LB-aware RSRP (Hatipoglu et al. 2025) ---
+        np.random.seed(self.config.seed)
+        self.setup_vehicles()
+        self.results['lb_aware_rsrp'] = self.run_algorithm('lb_aware_rsrp')
+        # --- MDPI composite energy-aware baseline (Abdullah et al. 2024) ---
+        np.random.seed(self.config.seed)
+        self.setup_vehicles()
+        self.results['mdpi_energy_efficient'] = self.run_algorithm('mdpi_energy_efficient')
 
         ea_stats = self.results['energy_aware']['stats']
         rssi_stats = self.results['rssi']['stats']
         sinr_stats = self.results['sinr']['stats']
         load_aware_rssi_stats = self.results['load_aware_rssi']['stats']
         naive_stats = self.results['naive_nearest']['stats']
+        literature_stats = self.results['literature_ul_ho']['stats']
+        lb_aware_stats = self.results['lb_aware_rsrp']['stats']
+        mdpi_stats = self.results['mdpi_energy_efficient']['stats']
 
         def _pct_saving(baseline_epb, ea_epb):
             if baseline_epb > 0:
@@ -1034,6 +1199,15 @@ class V2XSimulator:
             'energy_saving_vs_naive_percent': _pct_saving(
                 naive_stats['avg_energy_per_bit'], ea_stats['avg_energy_per_bit']
             ),
+            'energy_saving_vs_literature_ul_ho_percent': _pct_saving(
+                literature_stats['avg_energy_per_bit'], ea_stats['avg_energy_per_bit']
+            ),
+            'energy_saving_vs_lb_aware_rsrp_percent': _pct_saving(
+                lb_aware_stats['avg_energy_per_bit'], ea_stats['avg_energy_per_bit']
+            ),
+            'energy_saving_vs_mdpi_energy_efficient_percent': _pct_saving(
+                mdpi_stats['avg_energy_per_bit'], ea_stats['avg_energy_per_bit']
+            ),
             'rssi_vs_naive_energy_percent': _pct_saving(
                 naive_stats['avg_energy_per_bit'], rssi_stats['avg_energy_per_bit']
             ),
@@ -1043,6 +1217,9 @@ class V2XSimulator:
             'sinr_stats': sinr_stats,
             'load_aware_rssi_stats': load_aware_rssi_stats,
             'naive_nearest_stats': naive_stats,
+            'literature_ul_ho_stats': literature_stats,
+            'lb_aware_rsrp_stats': lb_aware_stats,
+            'mdpi_energy_efficient_stats': mdpi_stats,
         }
 
         print(f"\n{'='*60}")
@@ -1052,6 +1229,18 @@ class V2XSimulator:
         print(f"Energy Saving (EA vs SINR):            {comparison['energy_saving_vs_sinr_percent']:.2f}%")
         print(f"Energy Saving (EA vs Load-aware RSSI): {comparison['energy_saving_vs_load_aware_rssi_percent']:.2f}%")
         print(f"Energy Saving (EA vs Naive):           {comparison['energy_saving_vs_naive_percent']:.2f}%")
+        print(
+            "Energy Saving (EA vs Literature UL-HO): "
+            f"{comparison['energy_saving_vs_literature_ul_ho_percent']:.2f}%"
+        )
+        print(
+            "Energy Saving (EA vs LB-aware RSRP):    "
+            f"{comparison['energy_saving_vs_lb_aware_rsrp_percent']:.2f}%"
+        )
+        print(
+            "Energy Saving (EA vs MDPI composite):   "
+            f"{comparison['energy_saving_vs_mdpi_energy_efficient_percent']:.2f}%"
+        )
         print(f"CO2 Saving vs RSSI:                    {co2_saving_percent:.2f}%")
         print(f"Handoff Reduction (EA vs RSSI):        {handoff_reduction:.2f}%")
         print(f"EA handoffs <= RSSI: {ea_ho <= rssi_ho} ({ea_ho} vs {rssi_ho})")
